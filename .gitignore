@@ -1,0 +1,6 @@
+# Salida de compilación de STM32CubeIDE
+/Debug/
+/Release/
+
+# Configuración local de ejecución/depuración del IDE
+*.launch
