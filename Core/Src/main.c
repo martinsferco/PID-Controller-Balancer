@@ -25,7 +25,11 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "FreeRTOS.h"
+#include "task.h"
+#include "semphr.h"
+#include "hc_sr04.h"
+#include <stdio.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -46,14 +50,15 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-
+static HC_SR04_HandleTypeDef g_sensor;        /* instancia del sensor        */
+static SemaphoreHandle_t     g_sensorSem;     /* aviso ISR -> task (binario) */
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 void MX_FREERTOS_Init(void);
 /* USER CODE BEGIN PFP */
-
+void SensorTask(void *argument);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -93,7 +98,8 @@ int main(void)
   MX_TIM2_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
-
+  g_sensorSem = xSemaphoreCreateBinary();
+  xTaskCreate(SensorTask, "SensorTask", 256, NULL, 1, NULL);
   /* USER CODE END 2 */
 
   /* Init scheduler */
@@ -163,6 +169,77 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
+
+/* Puente HAL -> libreria: el HAL invoca este callback en cada captura de
+ * Input Capture (contexto ISR). El dispatcher la entrega a la instancia del
+ * sensor que corresponde, segun (timer, canal activo). Ver punto 2.3. */
+void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
+{
+  HC_SR04_HandleInterrupt(htim);
+}
+
+/* Hook que el driver invoca AL COMPLETAR una medicion (contexto ISR de TIM2).
+ * Despierta a SensorTask. Seguro desde ISR porque TIM2 esta en prioridad NVIC 5
+ * (>= configMAX_SYSCALL_INTERRUPT_PRIORITY). */
+static void sensor_on_complete(HC_SR04_HandleTypeDef *h)
+{
+  (void)h;
+  BaseType_t higherPriorityTaskWoken = pdFALSE;
+  xSemaphoreGiveFromISR(g_sensorSem, &higherPriorityTaskWoken);
+  portYIELD_FROM_ISR(higherPriorityTaskWoken);
+}
+
+/* Retarget de printf hacia USART2 (COM virtual del ST-Link), solo para pruebas. */
+int __io_putchar(int ch)
+{
+  HAL_UART_Transmit(&huart2, (uint8_t *)&ch, 1, HAL_MAX_DELAY);
+  return ch;
+}
+
+/* Task del sensor: dispara, se bloquea hasta el aviso de la ISR, lee y reporta.
+ * No hace polling ni busy-wait: mientras espera el echo, la CPU queda libre. */
+void SensorTask(void *argument)
+{
+  (void)argument;
+
+  HC_SR04_Init(&g_sensor, &htim2, TIM_CHANNEL_1, TRIG_GPIO_Port, TRIG_Pin);
+  HC_SR04_SetRange(&g_sensor, 2.0f, 50.0f);          /* ajustar al largo de la barra */
+  HC_SR04_SetCompleteCallback(&g_sensor, sensor_on_complete);
+
+  for (;;)
+  {
+    /* Descartar cualquier aviso viejo para esperar SOLO esta medicion. */
+    (void)xSemaphoreTake(g_sensorSem, 0);
+
+    if (HC_SR04_Trigger(&g_sensor) == HC_SR04_OK)
+    {
+      /* Bloqueo hasta el aviso de la ISR (guarda de 80 ms > timeout interno). */
+      if (xSemaphoreTake(g_sensorSem, pdMS_TO_TICKS(80)) == pdTRUE)
+      {
+        float dist = 0.0f;
+        HC_SR04_Status st = HC_SR04_GetDistance(&g_sensor, &dist);
+        if (st == HC_SR04_OK) {
+          /* Sin %f (newlib-nano no lo imprime por defecto): parte entera y 1 decimal. */
+          int entero   = (int)dist;
+          int decima   = (int)((dist - (float)entero) * 10.0f);
+          printf("Distancia: %d.%d cm\r\n", entero, decima);
+          /* TODO (paso siguiente): alimentar el lazo PID con 'dist'. */
+        } else if (st == HC_SR04_INVALID) {
+          printf("Fuera de rango\r\n");
+        }
+      }
+      else
+      {
+        /* No llego el echo: GetDistance detecta el timeout y resetea la FSM a IDLE. */
+        float dummy = 0.0f;
+        (void)HC_SR04_GetDistance(&g_sensor, &dummy);
+        printf("TIMEOUT\r\n");
+      }
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(50));   /* ~20 Hz de muestreo (ajustable segun el PID) */
+  }
+}
 
 /* USER CODE END 4 */
 
