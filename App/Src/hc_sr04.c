@@ -91,7 +91,7 @@ HC_SR04_Status HC_SR04_Init(HC_SR04_HandleTypeDef *h,
     h->t_rise       = 0;
     h->t_fall       = 0;
     h->distance_cm  = 0.0f;
-    h->data_ready   = false;
+    h->data_ready   = 0;
     h->trigger_tick = 0;
     h->on_complete  = NULL;
 
@@ -138,7 +138,7 @@ HC_SR04_Status HC_SR04_Trigger(HC_SR04_HandleTypeDef *h)
     }
 
     /* Preparar la maquina de estados para esperar el flanco de subida */
-    h->data_ready = false;
+    h->data_ready = 0;
     h->state      = HC_SR04_STATE_WAIT_RISE;
 
     /* Configurar captura por flanco de SUBIDA y arrancar la IC con interrupcion */
@@ -165,7 +165,7 @@ HC_SR04_Status HC_SR04_GetDistance(HC_SR04_HandleTypeDef *h, float *out_cm)
 
     if (h->data_ready) {
         float d = h->distance_cm;
-        h->data_ready = false;
+        h->data_ready = 0;
         if (d < h->min_cm || d > h->max_cm) {
             return HC_SR04_INVALID;
         }
@@ -211,7 +211,7 @@ void HC_SR04_TIM_IC_Callback(HC_SR04_HandleTypeDef *h)
         /* Medicion completa: detener IC, marcar dato y notificar */
         HAL_TIM_IC_Stop_IT(h->htim, h->channel);
         h->state      = HC_SR04_STATE_IDLE;
-        h->data_ready = true;
+        h->data_ready = 1;
 
         if (h->on_complete != NULL) {
             h->on_complete(h);   /* contexto ISR: usar ...FromISR() adentro */
