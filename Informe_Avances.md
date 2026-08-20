@@ -54,7 +54,8 @@ Todo el código de aplicación vive en **`App/`** (CubeMX no la toca); `main.c`/
 - **TIM4** base 100 ms (PSC=1599, ARR=999), NVIC prio 5.
 - **ADC1** IN4 (pote, PA4), 12 bits, polling, sampling 480 ciclos.
 - **USART2** 115200 (COM virtual ST-Link).
-- FreeRTOS: heap 24576, CMSIS_V2 + API nativa.
+- FreeRTOS: heap 24576. **API nativa** (tasks con `xTaskCreate`, arranque con `vTaskStartScheduler()`
+  estilo BlinkyRTOS; la capa CMSIS_V2 que genera CubeMX no se usa).
 
 ## Cableado
 

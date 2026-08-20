@@ -51,7 +51,10 @@ HC-SR04 ─────────> Kalman ────────────
 | **LD2** | Heartbeat del lazo | GPIO Output | PA5 (LED onboard) |
 
 ### 2.3 FreeRTOS
-- CMSIS-RTOS v2 habilitado (pero **usamos la API nativa** de FreeRTOS, no `osThreadNew`).
+- **API nativa de FreeRTOS**: tasks con `xTaskCreate`, arranque con `vTaskStartScheduler()` (estilo
+  BlinkyRTOS). CubeMX genera la capa CMSIS-RTOS v2 pero **no se usa**: en `main.c` el arranque
+  `osKernelInitialize/MX_FREERTOS_Init/osKernelStart` se reemplazó por `vTaskStartScheduler()` en
+  `USER CODE WHILE` (⚠️ re-aplicar tras cada regeneración de CubeMX; ver §7.3).
 - `configTOTAL_HEAP_SIZE = 24576`, `configMAX_PRIORITIES = 56`, `configMINIMAL_STACK_SIZE = 128`.
 - `configUSE_QUEUE_SETS = 1` → **agregado a mano** en `USER CODE` de `FreeRTOSConfig.h` (CubeMX no lo
   expone en la GUI; así sobrevive a regeneraciones).
@@ -210,9 +213,13 @@ Todo dentro de secciones `USER CODE` (para sobrevivir a CubeMX):
   - `USER CODE 4`: `HAL_TIM_IC_CaptureCallback(htim){ HC_SR04_HandleInterrupt(htim); }`.
   - `HAL_TIM_PeriodElapsedCallback`, `USER CODE Callback 1`: `if (htim->Instance == TIM4)
     App_OnTimerTick_FromISR();` (la rama de `TIM5 → HAL_IncTick()` queda intacta).
+  - `USER CODE WHILE`: `vTaskStartScheduler();` — **arranque nativo (estilo BlinkyRTOS)** en vez de la
+    capa CMSIS. ⚠️ CubeMX regenera `osKernelInitialize/MX_FREERTOS_Init/osKernelStart` fuera de
+    `USER CODE`: tras cada *Generate Code* hay que **borrar esas 3 líneas** y dejar solo
+    `vTaskStartScheduler()`.
 - **`Core/Inc/FreeRTOSConfig.h`**: `#define configUSE_QUEUE_SETS 1` en `USER CODE Defines`.
-- **`Core/Src/freertos.c`**: **intacto** (CubeMX). `MX_FREERTOS_Init` y `defaultTask` sin tocar; no
-  ponemos código de app ahí (decisión de estilo del proyecto).
+- **`Core/Src/freertos.c`**: **intacto** (CubeMX). `MX_FREERTOS_Init` y `defaultTask` sin tocar; ya no
+  se llaman (no ponemos código de app ahí).
 - Resto de `Core/` (`tim.c`, `adc.c`, `usart.c`, `gpio.c`, `stm32f4xx_it.c`): generado por CubeMX. La
   ISR `TIM4_IRQHandler` (en `stm32f4xx_it.c`) llama `HAL_TIM_IRQHandler(&htim4)` → dispara nuestro
   `HAL_TIM_PeriodElapsedCallback`.

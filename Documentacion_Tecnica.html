@@ -195,7 +195,10 @@
 
   <h3>2.3 FreeRTOS</h3>
   <ul>
-    <li>CMSIS-RTOS v2 habilitado, pero se usa la <b>API nativa</b> de FreeRTOS (no <code>osThreadNew</code>).</li>
+    <li><b>API nativa</b> de FreeRTOS: tasks con <code>xTaskCreate</code>, arranque con
+      <code>vTaskStartScheduler()</code> (estilo BlinkyRTOS). CubeMX genera la capa CMSIS-RTOS v2 pero
+      <b>no se usa</b>: el arranque <code>osKernel*</code> se reemplazó por
+      <code>vTaskStartScheduler()</code> en <code>USER CODE WHILE</code> (re-aplicar tras regenerar CubeMX).</li>
     <li><code>configTOTAL_HEAP_SIZE = 24576</code> · <code>configMAX_PRIORITIES = 56</code> · <code>configMINIMAL_STACK_SIZE = 128</code>.</li>
     <li><code>configUSE_QUEUE_SETS = 1</code> → agregado a mano en <code>USER CODE</code> de <code>FreeRTOSConfig.h</code> (CubeMX no lo expone; así sobrevive a regeneraciones).</li>
   </ul>
@@ -516,6 +519,9 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim){ HC_SR04_HandleInterrup
 
 // main.c — HAL_TIM_PeriodElapsedCallback, USER CODE Callback 1
 if (htim->Instance == TIM4) { App_OnTimerTick_FromISR(); }
+
+// main.c — USER CODE BEGIN WHILE  (arranque nativo, estilo BlinkyRTOS)
+vTaskStartScheduler();   // reemplaza osKernelInitialize/MX_FREERTOS_Init/osKernelStart
 
 // FreeRTOSConfig.h — USER CODE Defines
 #define configUSE_QUEUE_SETS 1</code></pre>

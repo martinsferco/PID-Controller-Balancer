@@ -154,6 +154,10 @@ Para demostrar que la arquitectura sobrevive a la regeneración:
    - El glue de `main.c` quedó intacto: `App_Init()` en USER CODE 2; ramas de callback
      (`HAL_TIM_IC_CaptureCallback` y `TIM4` en `HAL_TIM_PeriodElapsedCallback`) en su lugar.
    - `configUSE_QUEUE_SETS 1` sigue en `FreeRTOSConfig.h` (sección USER CODE).
+   - **Arranque nativo:** CubeMX vuelve a generar `osKernelInitialize(); MX_FREERTOS_Init();
+     osKernelStart();` (fuera de USER CODE). **Borrá esas 3 líneas** — el arranque correcto es
+     `vTaskStartScheduler();` que quedó en `USER CODE BEGIN WHILE`. (Si no las borrás no rompe, pero
+     arranca por la capa CMSIS y crea un `defaultTask` de más.)
    - El comportamiento no cambió.
 3. Si `App/` se cayó del build tras regenerar → **New → Source Folder → App** (el include `../App/Inc`
    normalmente persiste).
