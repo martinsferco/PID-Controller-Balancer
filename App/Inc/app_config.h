@@ -27,4 +27,21 @@
 /* --- Servo MG90S (barrido de prueba) -------------------------------------- */
 #define SERVO_SWEEP_MS          1000u   /* tiempo en cada extremo              */
 
+/* --- Flags de test (opt-in; en produccion van en 0) ----------------------- */
+#define APP_RUN_SELFTESTS       0       /* 1 = corre self-tests al arrancar    */
+
+/* --- Filtro de Kalman ----------------------------------------------------- */
+#define KALMAN_DT               0.1f    /* 100 ms (tick del sensor)            */
+#define KALMAN_Q                0.05f   /* densidad ruido de proceso (tuning)  */
+#define KALMAN_R                0.09f   /* varianza HC-SR04 ~ (0.3 cm)^2       */
+
+/* --- Controlador PID (ganancias iniciales; tuning fino en Etapa 5) -------- */
+#define PID_DT                  0.1f
+#define PID_KP                  1.2f
+#define PID_KI                  0.4f
+#define PID_KD                  0.15f
+#define PID_OUT_MIN             (-20.0f) /* grados relativos al centro          */
+#define PID_OUT_MAX             (20.0f)
+#define SERVO_CENTER_DEG        90.0f    /* angulo neutro de la barra           */
+
 #endif /* APP_CONFIG_H */
