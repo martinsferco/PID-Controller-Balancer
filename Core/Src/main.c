@@ -101,16 +101,18 @@ int main(void)
   /* USER CODE END 2 */
 
   /* Init scheduler */
-  osKernelInitialize();  /* Call init function for freertos objects (in cmsis_os2.c) */
-  MX_FREERTOS_Init();
 
   /* Start scheduler */
-  osKernelStart();
 
   /* We should never get here as control is now taken by the scheduler */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  /* Arranque nativo de FreeRTOS (estilo BlinkyRTOS). Las tasks ya se crearon en
+   * App_Init() (USER CODE 2). Se usa la API nativa en vez de la capa CMSIS
+   * (osKernelInitialize/MX_FREERTOS_Init/osKernelStart). vTaskStartScheduler()
+   * no retorna. */
+  vTaskStartScheduler();
   while (1)
   {
     /* USER CODE END WHILE */

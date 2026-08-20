@@ -15,6 +15,7 @@ extern "C" {
 #endif
 
 #include "FreeRTOS.h"
+#include "task.h"
 #include "semphr.h"
 #include "queue.h"
 #include "hc_sr04.h"
