@@ -29,6 +29,7 @@
 #include "task.h"
 #include "semphr.h"
 #include "hc_sr04.h"
+#include "servo_mg90s.h"
 #include <stdio.h>
 /* USER CODE END Includes */
 
@@ -52,6 +53,7 @@
 /* USER CODE BEGIN PV */
 static HC_SR04_HandleTypeDef g_sensor;        /* instancia del sensor        */
 static SemaphoreHandle_t     g_sensorSem;     /* aviso ISR -> task (binario) */
+static Servo_HandleTypeDef   g_servo;         /* instancia del servo         */
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -59,6 +61,7 @@ void SystemClock_Config(void);
 void MX_FREERTOS_Init(void);
 /* USER CODE BEGIN PFP */
 void SensorTask(void *argument);
+void ServoTask(void *argument);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -97,9 +100,11 @@ int main(void)
   MX_GPIO_Init();
   MX_TIM2_Init();
   MX_USART2_UART_Init();
+  MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
   g_sensorSem = xSemaphoreCreateBinary();
   xTaskCreate(SensorTask, "SensorTask", 256, NULL, 1, NULL);
+  xTaskCreate(ServoTask,  "ServoTask",  256, NULL, 1, NULL);
   /* USER CODE END 2 */
 
   /* Init scheduler */
@@ -238,6 +243,25 @@ void SensorTask(void *argument)
     }
 
     vTaskDelay(pdMS_TO_TICKS(50));   /* ~20 Hz de muestreo (ajustable segun el PID) */
+  }
+}
+
+/* Task de prueba del servo: lo mueve ciclicamente entre los dos extremos cada 1 s.
+ * Corre EN PARALELO con SensorTask (FreeRTOS las multiplexa). Despues el angulo
+ * lo manejara el PID en funcion de la distancia medida. */
+void ServoTask(void *argument)
+{
+  (void)argument;
+
+  Servo_Init(&g_servo, &htim3, TIM_CHANNEL_1);   /* arranca el PWM y centra */
+
+  for (;;)
+  {
+    Servo_SetAngle(&g_servo, 180.0f);   /* un extremo     */
+    vTaskDelay(pdMS_TO_TICKS(1000));
+
+    Servo_SetAngle(&g_servo, 0.0f);     /* el otro extremo */
+    vTaskDelay(pdMS_TO_TICKS(1000));
   }
 }
 
