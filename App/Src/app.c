@@ -11,6 +11,7 @@
 #include "app_config.h"
 #include "task_sensor.h"
 #include "task_servo.h"
+#include "selftest.h"
 
 #include "FreeRTOS.h"
 #include "task.h"
@@ -43,6 +44,12 @@ int __io_putchar(int ch)
  * de main.c, antes de arrancar el scheduler. */
 void App_Init(void)
 {
+#if APP_RUN_SELFTESTS
+  /* Self-tests on-target de los modulos puros, antes de arrancar el lazo.
+   * Con APP_RUN_SELFTESTS=0 (produccion) este bloque no se compila. */
+  SelfTest_Run();
+#endif
+
   g_sensorSem = xSemaphoreCreateBinary();
   xTaskCreate(SensorTask, "SensorTask", SENSOR_TASK_STACK, NULL, SENSOR_TASK_PRIO, NULL);
   xTaskCreate(ServoTask,  "ServoTask",  SERVO_TASK_STACK,  NULL, SERVO_TASK_PRIO,  NULL);
