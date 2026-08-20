@@ -10,25 +10,34 @@
 #ifndef APP_CONFIG_H
 #define APP_CONFIG_H
 
-/* --- Tasks ---------------------------------------------------------------- *
- * Mismos valores que el baseline (Etapa 0): el tuning fino de prioridades y
- * stacks llega en las etapas del pipeline RTOS. Stack en WORDS (no bytes).   */
+/* --- Tasks (prioridades del anteproyecto) --------------------------------- *
+ * Stack en WORDS (no bytes). Prioridad mayor = mas urgente.                  *
+ * Sensor 5, Kalman 4, Motor 4, PID 3, Pot 1.                                 */
 #define SENSOR_TASK_STACK       256u
-#define SERVO_TASK_STACK        256u
-#define SENSOR_TASK_PRIO        1u
-#define SERVO_TASK_PRIO         1u
+#define KALMAN_TASK_STACK       256u
+#define PID_TASK_STACK          256u
+#define MOTOR_TASK_STACK        256u
+#define POT_TASK_STACK          256u
+
+#define SENSOR_TASK_PRIO        5u
+#define KALMAN_TASK_PRIO        4u
+#define MOTOR_TASK_PRIO         4u
+#define PID_TASK_PRIO           3u
+#define POT_TASK_PRIO           1u
 
 /* --- Sensor HC-SR04 ------------------------------------------------------- */
 #define SENSOR_MIN_CM           2.0f
 #define SENSOR_MAX_CM           50.0f   /* ajustar al largo de la barra        */
-#define SENSOR_PERIOD_MS        50u     /* ~20 Hz de muestreo                  */
-#define SENSOR_ECHO_TIMEOUT_MS  80u     /* guarda > timeout interno del driver */
+#define SENSOR_ECHO_TIMEOUT_MS  80u     /* guarda < periodo (100 ms), > timeout interno */
 
-/* --- Servo MG90S (barrido de prueba) -------------------------------------- */
-#define SERVO_SWEEP_MS          1000u   /* tiempo en cada extremo              */
+/* --- Potenciometro (setpoint) --------------------------------------------- */
+#define POT_RANGE_CM            50.0f   /* largo util de la barra (mapea el pote)*/
+#define POT_PERIOD_MS           200u    /* lectura del setpoint cada 200 ms    */
 
-/* --- Flags de test (opt-in; en produccion van en 0) ----------------------- */
+/* --- Flags de test / diagnostico (opt-in; produccion en 0 salvo LOG) ------ */
 #define APP_RUN_SELFTESTS       0       /* 1 = corre self-tests al arrancar    */
+#define APP_USE_SYNTHETIC_SENSOR 0      /* 1 = sensor sintetico (valida cadena sin HW) */
+#define APP_LOG_ENABLED         1       /* 1 = traza del lazo por UART (Etapa 6 la apaga) */
 
 /* --- Filtro de Kalman ----------------------------------------------------- */
 #define KALMAN_DT               0.1f    /* 100 ms (tick del sensor)            */
