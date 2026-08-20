@@ -22,6 +22,8 @@ void MotorTask(void *argument)
   (void)argument;
 
   Servo_Init(&g_servo, &htim3, TIM_CHANNEL_1);   /* arranca el PWM y centra */
+  Servo_SetLimits(&g_servo, SERVO_MIN_US, SERVO_MAX_US,
+                  SERVO_MIN_DEG, SERVO_MAX_DEG); /* calibracion (ajustar en HW) */
 
   for (;;)
   {

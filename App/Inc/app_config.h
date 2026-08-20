@@ -53,4 +53,13 @@
 #define PID_OUT_MAX             (20.0f)
 #define SERVO_CENTER_DEG        90.0f    /* angulo neutro de la barra           */
 
+/* --- Calibracion del servo (AJUSTAR al recorrido mecanico real, Etapa 5) --- *
+ * El mapeo por defecto del driver (1000-2000us = 0-180deg) puede no coincidir  *
+ * con la mecanica; se recalibra con Servo_SetLimits en MotorTask. Empezar con   *
+ * estos valores y ajustar contra los topes fisicos de la barra.                */
+#define SERVO_MIN_US            1000u
+#define SERVO_MAX_US            2000u
+#define SERVO_MIN_DEG           0.0f
+#define SERVO_MAX_DEG           180.0f
+
 #endif /* APP_CONFIG_H */
