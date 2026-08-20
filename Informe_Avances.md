@@ -48,7 +48,7 @@ Todo el código de aplicación vive en **`App/`** (CubeMX no la toca); `main.c`/
 
 ## Configuración de hardware (CubeMX)
 
-- Reloj: SYSCLK 64 MHz (PLL/HSI), **HCLK 16 MHz** → timers a 16 MHz.
+- Reloj: **HSI directo, sin PLL** (estilo BlinkyRTOS) → SYSCLK = **HCLK = 16 MHz** → timers a 16 MHz.
 - **TIM2** Input Capture (ECHO, PA0/CH1), PSC=15 (1 µs/tick); **TRIG** PA9. NVIC prio 5.
 - **TIM3** PWM (servo, PA6/D12), PSC=15, ARR=19999 (50 Hz).
 - **TIM4** base 100 ms (PSC=1599, ARR=999), NVIC prio 5.

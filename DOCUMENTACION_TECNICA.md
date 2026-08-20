@@ -32,10 +32,10 @@ HC-SR04 ─────────> Kalman ────────────
 ## 2. Configuración de hardware (CubeMX / `PIDController.ioc`)
 
 ### 2.1 Reloj
-- Oscilador **HSI** + **PLL**: PLLM=8, PLLN=64, PLLP=2 → SYSCLK **64 MHz**.
-- AHB divisor **/4** → **HCLK = 16 MHz**. APB1 /2, APB2 /1.
-- **Consecuencia clave:** TIM2 y TIM4 (bus APB1) corren a **16 MHz** (el HAL aplica ×2 cuando el
-  prescaler de APB1 ≠ 1). Por eso los prescalers se calculan sobre 16 MHz.
+- Oscilador **HSI** (16 MHz interno), **sin PLL** — mismo estilo que el proyecto de referencia BlinkyRTOS.
+- SYSCLK = HSI directo = **16 MHz**. AHB divisor **/1** → **HCLK = 16 MHz**. APB1 /2, APB2 /1.
+- **Consecuencia clave:** TIM2/TIM3/TIM4 (bus APB1) corren a **16 MHz** (el HAL aplica ×2 cuando el
+  prescaler de APB1 ≠ 1). Por eso los prescalers se calculan sobre 16 MHz (PSC=15 → 1 µs/tick).
 
 ### 2.2 Periféricos
 

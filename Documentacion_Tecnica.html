@@ -148,34 +148,32 @@
   <h2>2. Configuración de hardware (CubeMX)</h2>
 
   <h3>2.1 Árbol de reloj</h3>
-  <p>Oscilador <b>HSI</b> + <b>PLL</b> (M=8, N=64, P=2) → SYSCLK <b>64 MHz</b>. AHB <code>/4</code> →
-  <b>HCLK = 16 MHz</b>. Como TIM2 y TIM4 están en APB1 (prescaler ≠ 1), el HAL les aplica ×2, por lo que
-  <b>corren a 16 MHz</b>. Todos los prescalers de timer se calculan sobre 16 MHz.</p>
+  <p>Oscilador <b>HSI</b> (16 MHz interno), <b>sin PLL</b> — mismo estilo que el proyecto de referencia
+  <b>BlinkyRTOS</b>. SYSCLK = HSI directo = <b>16 MHz</b>, AHB <code>/1</code> → <b>HCLK = 16 MHz</b>.
+  Como TIM2/TIM3/TIM4 están en APB1 (prescaler ≠ 1), el HAL les aplica ×2, por lo que <b>corren a
+  16 MHz</b>. Todos los prescalers de timer se calculan sobre 16 MHz (PSC=15 → 1 µs/tick).</p>
 
   <figure class="fig">
     <svg width="700" height="120" viewBox="0 0 700 120" font-family="Segoe UI">
       <defs><marker id="arw2" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#3a4550"/></marker></defs>
-      <rect x="10" y="45" width="90" height="34" rx="6" fill="#eef4f8" stroke="#1a4d7a" stroke-width="1.6"/>
-      <text x="55" y="66" text-anchor="middle" font-size="10" fill="#123a5e">HSI 16MHz</text>
-      <rect x="140" y="45" width="90" height="34" rx="6" fill="#eef4f8" stroke="#1a4d7a" stroke-width="1.6"/>
-      <text x="185" y="61" text-anchor="middle" font-size="10" fill="#123a5e">PLL</text>
-      <text x="185" y="73" text-anchor="middle" font-size="8" fill="#5a6773">×64 /8 /2</text>
-      <rect x="270" y="45" width="110" height="34" rx="6" fill="#e3edf4" stroke="#1a4d7a" stroke-width="1.6"/>
-      <text x="325" y="61" text-anchor="middle" font-size="10" font-weight="bold" fill="#123a5e">SYSCLK 64MHz</text>
-      <text x="325" y="73" text-anchor="middle" font-size="8" fill="#5a6773">/4 (AHB)</text>
-      <rect x="420" y="45" width="110" height="34" rx="6" fill="#e9f7ef" stroke="#2e8b57" stroke-width="1.6"/>
-      <text x="475" y="66" text-anchor="middle" font-size="10" font-weight="bold" fill="#123a5e">HCLK 16MHz</text>
+      <rect x="20" y="45" width="120" height="34" rx="6" fill="#eef4f8" stroke="#1a4d7a" stroke-width="1.6"/>
+      <text x="80" y="66" text-anchor="middle" font-size="10" font-weight="bold" fill="#123a5e">HSI 16MHz</text>
+      <rect x="200" y="45" width="140" height="34" rx="6" fill="#e3edf4" stroke="#1a4d7a" stroke-width="1.6"/>
+      <text x="270" y="61" text-anchor="middle" font-size="10" font-weight="bold" fill="#123a5e">SYSCLK 16MHz</text>
+      <text x="270" y="73" text-anchor="middle" font-size="8" fill="#5a6773">HSI directo (sin PLL)</text>
+      <rect x="400" y="45" width="130" height="34" rx="6" fill="#e9f7ef" stroke="#2e8b57" stroke-width="1.6"/>
+      <text x="465" y="61" text-anchor="middle" font-size="10" font-weight="bold" fill="#123a5e">HCLK 16MHz</text>
+      <text x="465" y="73" text-anchor="middle" font-size="8" fill="#5a6773">/1 (AHB)</text>
       <rect x="570" y="20" width="120" height="34" rx="6" fill="#fef3e0" stroke="#d98324" stroke-width="1.6"/>
       <text x="630" y="41" text-anchor="middle" font-size="9" fill="#123a5e">Timers APB1 16MHz</text>
       <rect x="570" y="70" width="120" height="34" rx="6" fill="#fdeef0" stroke="#c0392b" stroke-width="1.6"/>
       <text x="630" y="91" text-anchor="middle" font-size="9" fill="#123a5e">CPU / periféricos</text>
-      <line x1="100" y1="62" x2="138" y2="62" stroke="#3a4550" stroke-width="1.6" marker-end="url(#arw2)"/>
-      <line x1="230" y1="62" x2="268" y2="62" stroke="#3a4550" stroke-width="1.6" marker-end="url(#arw2)"/>
-      <line x1="380" y1="62" x2="418" y2="62" stroke="#3a4550" stroke-width="1.6" marker-end="url(#arw2)"/>
+      <line x1="140" y1="62" x2="198" y2="62" stroke="#3a4550" stroke-width="1.6" marker-end="url(#arw2)"/>
+      <line x1="340" y1="62" x2="398" y2="62" stroke="#3a4550" stroke-width="1.6" marker-end="url(#arw2)"/>
       <line x1="530" y1="58" x2="568" y2="37" stroke="#3a4550" stroke-width="1.6" marker-end="url(#arw2)"/>
       <line x1="530" y1="66" x2="568" y2="87" stroke="#3a4550" stroke-width="1.6" marker-end="url(#arw2)"/>
     </svg>
-    <figcaption>Figura 2 — Cadena de reloj. Los timers APB1 (TIM2, TIM4) quedan a 16 MHz.</figcaption>
+    <figcaption>Figura 2 — Cadena de reloj (HSI directo, sin PLL). Los timers APB1 quedan a 16 MHz.</figcaption>
   </figure>
 
   <h3>2.2 Periféricos y pines</h3>
