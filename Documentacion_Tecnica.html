@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Documentación Técnica — Ball-and-Beam</title>
+<style>
+  @page { size: A4; margin: 16mm 14mm 18mm 14mm; }
+  * { box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body {
+    font-family: "Segoe UI", Arial, sans-serif;
+    color: #1a1c20; font-size: 10.5pt; line-height: 1.5; margin: 0;
+  }
+  h1,h2,h3,h4 { color: #123a5e; line-height: 1.2; }
+  h2 { font-size: 17pt; border-bottom: 3px solid #2e8b8b; padding-bottom: 4px; margin-top: 0; }
+  h3 { font-size: 13pt; margin-top: 18px; color: #1a4d7a; }
+  h4 { font-size: 11pt; margin: 12px 0 4px; color: #2e6b6b; }
+  code { font-family: "Consolas","Courier New",monospace; background:#eef2f5; padding:1px 4px; border-radius:3px; font-size:9.2pt; color:#0b3d5c; }
+  pre { background:#1e2733; color:#e6edf3; padding:12px 14px; border-radius:6px; font-family:"Consolas",monospace; font-size:8.6pt; line-height:1.45; overflow-x:auto; }
+  pre code { background:none; color:inherit; padding:0; }
+  table { border-collapse: collapse; width:100%; margin:10px 0; font-size:9.2pt; }
+  th, td { border:1px solid #cbd6e0; padding:5px 8px; text-align:left; vertical-align:top; }
+  th { background:#e3edf4; color:#123a5e; }
+  tr:nth-child(even) td { background:#f5f9fc; }
+  .section { page-break-before: always; }
+  .nobreak { page-break-inside: avoid; }
+  .fig { text-align:center; margin:16px 0; page-break-inside: avoid; }
+  .fig svg { max-width:100%; height:auto; }
+  .fig figcaption { font-size:8.6pt; color:#5a6773; margin-top:6px; font-style:italic; }
+  .lead { font-size:11pt; color:#3a4550; }
+  .pill { display:inline-block; background:#2e8b8b; color:#fff; border-radius:10px; padding:1px 9px; font-size:8.5pt; font-weight:600; }
+  .note { background:#fef7e6; border-left:4px solid #d98324; padding:8px 12px; border-radius:4px; margin:10px 0; font-size:9.3pt; }
+  .cover { text-align:center; padding-top:60mm; }
+  .cover h1 { font-size:30pt; color:#123a5e; margin:0; }
+  .cover .sub { font-size:14pt; color:#2e8b8b; margin-top:8px; font-weight:600; }
+  .cover .meta { margin-top:40px; font-size:11pt; color:#5a6773; }
+  .toc a { color:#1a4d7a; text-decoration:none; }
+  ul { margin:6px 0; padding-left:20px; }
+  li { margin:2px 0; }
+  .kbd { font-family:"Consolas",monospace; background:#123a5e; color:#fff; border-radius:3px; padding:1px 6px; font-size:8.6pt; }
+</style>
+</head>
+<body>
+
+<!-- ============ PORTADA ============ -->
+<div class="cover">
+  <div style="font-size:11pt; letter-spacing:3px; color:#2e8b8b; font-weight:600;">DOCUMENTACIÓN TÉCNICA</div>
+  <h1>Ball-and-Beam</h1>
+  <div class="sub">Control PID en tiempo real · STM32F401RE + FreeRTOS</div>
+  <svg width="360" height="150" viewBox="0 0 360 150" style="margin-top:30px;">
+    <!-- mini esquema de portada: barra inclinada con bola -->
+    <line x1="40" y1="120" x2="40" y2="40" stroke="#123a5e" stroke-width="3"/>
+    <circle cx="40" cy="120" r="6" fill="#2e8b8b"/>
+    <line x1="55" y1="95" x2="320" y2="55" stroke="#1a4d7a" stroke-width="6" stroke-linecap="round"/>
+    <circle cx="230" cy="72" r="12" fill="#d98324" stroke="#a5651b" stroke-width="2"/>
+    <text x="150" y="140" font-size="10" fill="#5a6773" text-anchor="middle" font-family="Segoe UI">HC-SR04 → Kalman → PID → Servo</text>
+  </svg>
+  <div class="meta">
+    Sistema de balanceo con filtro de Kalman e IPC por colas<br>
+    Autor: Martín Sferco &nbsp;·&nbsp; 2026
+  </div>
+</div>
+
+<!-- ============ ÍNDICE ============ -->
+<div class="section">
+  <h2>Índice</h2>
+  <ol class="toc" style="font-size:11pt; line-height:1.9;">
+    <li>Visión general del sistema</li>
+    <li>Configuración de hardware (CubeMX)</li>
+    <li>Arquitectura de software y estructura de carpetas</li>
+    <li>Pipeline de tiempo real (tasks, colas, semáforos)</li>
+    <li>Drivers de periféricos</li>
+    <li>Algoritmos: Kalman y PID</li>
+    <li>Wiring, tasks y glue</li>
+    <li>Flags de compilación</li>
+    <li>Decisiones de diseño e historial</li>
+  </ol>
+</div>
+
+<!-- ============ 1. VISIÓN GENERAL ============ -->
+<div class="section">
+  <h2>1. Visión general del sistema</h2>
+  <p class="lead">Un objeto desliza sobre una <b>barra articulada</b> que un servo inclina. El objetivo
+  es <b>posicionar el objeto</b> en un punto elegido de la barra y mantenerlo estable, pese a
+  perturbaciones.</p>
+
+  <p>La distancia del objeto se mide con un sensor ultrasónico, se <b>filtra</b> (Kalman) para quitar
+  ruido, un controlador <b>PID</b> calcula cuánto inclinar la barra, y un <b>servo</b> ejecuta esa
+  inclinación. El punto deseado (<i>setpoint</i>) lo fija el usuario con un <b>potenciómetro</b>.</p>
+
+  <figure class="fig">
+    <svg width="720" height="230" viewBox="0 0 720 230" font-family="Segoe UI">
+      <defs>
+        <marker id="arw" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+          <path d="M0,0 L8,3 L0,6 Z" fill="#3a4550"/>
+        </marker>
+      </defs>
+      <!-- bloques -->
+      <g>
+        <rect x="20"  y="70" width="110" height="56" rx="8" fill="#eef4f8" stroke="#1a4d7a" stroke-width="2"/>
+        <text x="75" y="94" text-anchor="middle" font-size="12" font-weight="bold" fill="#123a5e">HC-SR04</text>
+        <text x="75" y="112" text-anchor="middle" font-size="9" fill="#5a6773">mide distancia</text>
+
+        <rect x="170" y="70" width="110" height="56" rx="8" fill="#e8f0fe" stroke="#4a6fa5" stroke-width="2"/>
+        <text x="225" y="94" text-anchor="middle" font-size="12" font-weight="bold" fill="#123a5e">Kalman</text>
+        <text x="225" y="112" text-anchor="middle" font-size="9" fill="#5a6773">filtra ruido</text>
+
+        <rect x="320" y="70" width="110" height="56" rx="8" fill="#fef3e0" stroke="#d98324" stroke-width="2"/>
+        <text x="375" y="94" text-anchor="middle" font-size="12" font-weight="bold" fill="#123a5e">PID</text>
+        <text x="375" y="112" text-anchor="middle" font-size="9" fill="#5a6773">calcula acción</text>
+
+        <rect x="470" y="70" width="110" height="56" rx="8" fill="#e9f7ef" stroke="#2e8b57" stroke-width="2"/>
+        <text x="525" y="94" text-anchor="middle" font-size="12" font-weight="bold" fill="#123a5e">Servo</text>
+        <text x="525" y="112" text-anchor="middle" font-size="9" fill="#5a6773">inclina barra</text>
+
+        <rect x="620" y="70" width="80" height="56" rx="8" fill="#f3e9f7" stroke="#8e44ad" stroke-width="2"/>
+        <text x="660" y="94" text-anchor="middle" font-size="11" font-weight="bold" fill="#123a5e">Barra +</text>
+        <text x="660" y="110" text-anchor="middle" font-size="11" font-weight="bold" fill="#123a5e">objeto</text>
+      </g>
+      <!-- flechas cadena -->
+      <line x1="130" y1="98" x2="168" y2="98" stroke="#3a4550" stroke-width="2" marker-end="url(#arw)"/>
+      <line x1="280" y1="98" x2="318" y2="98" stroke="#3a4550" stroke-width="2" marker-end="url(#arw)"/>
+      <line x1="430" y1="98" x2="468" y2="98" stroke="#3a4550" stroke-width="2" marker-end="url(#arw)"/>
+      <line x1="580" y1="98" x2="618" y2="98" stroke="#3a4550" stroke-width="2" marker-end="url(#arw)"/>
+      <!-- lazo de realimentacion -->
+      <path d="M660,126 L660,180 L75,180 L75,128" fill="none" stroke="#9aa7b3" stroke-width="1.6" stroke-dasharray="5,4" marker-end="url(#arw)"/>
+      <text x="360" y="196" text-anchor="middle" font-size="9" fill="#7a8793">realimentación: la nueva posición se vuelve a medir</text>
+      <!-- setpoint pote -->
+      <rect x="320" y="8" width="110" height="40" rx="8" fill="#fdeef0" stroke="#c0392b" stroke-width="2"/>
+      <text x="375" y="25" text-anchor="middle" font-size="11" font-weight="bold" fill="#123a5e">Potenciómetro</text>
+      <text x="375" y="39" text-anchor="middle" font-size="9" fill="#5a6773">setpoint (punto deseado)</text>
+      <line x1="375" y1="48" x2="375" y2="68" stroke="#3a4550" stroke-width="2" marker-end="url(#arw)"/>
+    </svg>
+    <figcaption>Figura 1 — Lazo de control cerrado del ball-and-beam.</figcaption>
+  </figure>
+
+  <table class="nobreak">
+    <tr><th>Ítem</th><th>Detalle</th></tr>
+    <tr><td>Plataforma</td><td>STM32F401RE (NUCLEO-F401RE), Cortex-M4F</td></tr>
+    <tr><td>Framework</td><td>HAL (STM32CubeMX) + FreeRTOS (API nativa)</td></tr>
+    <tr><td>Sensores/actuadores</td><td>HC-SR04 (ultrasonido), servo MG90S (PWM), potenciómetro (ADC)</td></tr>
+    <tr><td>Idea central</td><td>Todo el código de app en <code>App/</code> → sobrevive a la regeneración de CubeMX</td></tr>
+  </table>
+</div>
+
+<!-- ============ 2. HARDWARE ============ -->
+<div class="section">
+  <h2>2. Configuración de hardware (CubeMX)</h2>
+
+  <h3>2.1 Árbol de reloj</h3>
+  <p>Oscilador <b>HSI</b> + <b>PLL</b> (M=8, N=64, P=2) → SYSCLK <b>64 MHz</b>. AHB <code>/4</code> →
+  <b>HCLK = 16 MHz</b>. Como TIM2 y TIM4 están en APB1 (prescaler ≠ 1), el HAL les aplica ×2, por lo que
+  <b>corren a 16 MHz</b>. Todos los prescalers de timer se calculan sobre 16 MHz.</p>
+
+  <figure class="fig">
+    <svg width="700" height="120" viewBox="0 0 700 120" font-family="Segoe UI">
+      <defs><marker id="arw2" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#3a4550"/></marker></defs>
+      <rect x="10" y="45" width="90" height="34" rx="6" fill="#eef4f8" stroke="#1a4d7a" stroke-width="1.6"/>
+      <text x="55" y="66" text-anchor="middle" font-size="10" fill="#123a5e">HSI 16MHz</text>
+      <rect x="140" y="45" width="90" height="34" rx="6" fill="#eef4f8" stroke="#1a4d7a" stroke-width="1.6"/>
+      <text x="185" y="61" text-anchor="middle" font-size="10" fill="#123a5e">PLL</text>
+      <text x="185" y="73" text-anchor="middle" font-size="8" fill="#5a6773">×64 /8 /2</text>
+      <rect x="270" y="45" width="110" height="34" rx="6" fill="#e3edf4" stroke="#1a4d7a" stroke-width="1.6"/>
+      <text x="325" y="61" text-anchor="middle" font-size="10" font-weight="bold" fill="#123a5e">SYSCLK 64MHz</text>
+      <text x="325" y="73" text-anchor="middle" font-size="8" fill="#5a6773">/4 (AHB)</text>
+      <rect x="420" y="45" width="110" height="34" rx="6" fill="#e9f7ef" stroke="#2e8b57" stroke-width="1.6"/>
+      <text x="475" y="66" text-anchor="middle" font-size="10" font-weight="bold" fill="#123a5e">HCLK 16MHz</text>
+      <rect x="570" y="20" width="120" height="34" rx="6" fill="#fef3e0" stroke="#d98324" stroke-width="1.6"/>
+      <text x="630" y="41" text-anchor="middle" font-size="9" fill="#123a5e">Timers APB1 16MHz</text>
+      <rect x="570" y="70" width="120" height="34" rx="6" fill="#fdeef0" stroke="#c0392b" stroke-width="1.6"/>
+      <text x="630" y="91" text-anchor="middle" font-size="9" fill="#123a5e">CPU / periféricos</text>
+      <line x1="100" y1="62" x2="138" y2="62" stroke="#3a4550" stroke-width="1.6" marker-end="url(#arw2)"/>
+      <line x1="230" y1="62" x2="268" y2="62" stroke="#3a4550" stroke-width="1.6" marker-end="url(#arw2)"/>
+      <line x1="380" y1="62" x2="418" y2="62" stroke="#3a4550" stroke-width="1.6" marker-end="url(#arw2)"/>
+      <line x1="530" y1="58" x2="568" y2="37" stroke="#3a4550" stroke-width="1.6" marker-end="url(#arw2)"/>
+      <line x1="530" y1="66" x2="568" y2="87" stroke="#3a4550" stroke-width="1.6" marker-end="url(#arw2)"/>
+    </svg>
+    <figcaption>Figura 2 — Cadena de reloj. Los timers APB1 (TIM2, TIM4) quedan a 16 MHz.</figcaption>
+  </figure>
+
+  <h3>2.2 Periféricos y pines</h3>
+  <table>
+    <tr><th>Periférico</th><th>Uso</th><th>Configuración</th><th>Pin(es)</th></tr>
+    <tr><td>TIM2</td><td>Input Capture del ECHO</td><td>PSC=15 (1µs/tick), 32-bit, NVIC prio <b>5</b></td><td>PA0 / A0 (CH1)</td></tr>
+    <tr><td>GPIO</td><td>TRIG del sensor</td><td>Output push-pull</td><td>PA9 / D8</td></tr>
+    <tr><td>TIM3</td><td>PWM del servo</td><td>PSC=15, ARR=19999 (50 Hz)</td><td>PA6 / D12 (CH1)</td></tr>
+    <tr><td>TIM4</td><td>Tick de 100 ms</td><td>PSC=1599, ARR=999, NVIC prio <b>5</b></td><td>— (sin pin)</td></tr>
+    <tr><td>ADC1</td><td>Potenciómetro</td><td>12 bits, IN4, polling, sampling 480, sin DMA/IRQ</td><td>PA4 / A2</td></tr>
+    <tr><td>USART2</td><td>Consola / traza</td><td>115200 8N1 (COM virtual ST-Link)</td><td>PA2/PA3</td></tr>
+    <tr><td>TIM5</td><td>Time base del HAL</td><td>(automático de CubeMX)</td><td>—</td></tr>
+    <tr><td>LD2</td><td>Heartbeat del lazo</td><td>GPIO Output (LED onboard)</td><td>PA5</td></tr>
+  </table>
+
+  <div class="note"><b>¿Por qué prioridad NVIC = 5?</b> <code>configMAX_SYSCALL_INTERRUPT_PRIORITY = 5</code>.
+  Una ISR que llama <code>...FromISR()</code> (dar un semáforo) debe tener prioridad NVIC numéricamente
+  ≥ 5. TIM2 (echo) y TIM4 (tick) dan semáforos → van en <b>5</b>. Con prioridad menor, <b>hard fault</b>.</div>
+
+  <h3>2.3 FreeRTOS</h3>
+  <ul>
+    <li>CMSIS-RTOS v2 habilitado, pero se usa la <b>API nativa</b> de FreeRTOS (no <code>osThreadNew</code>).</li>
+    <li><code>configTOTAL_HEAP_SIZE = 24576</code> · <code>configMAX_PRIORITIES = 56</code> · <code>configMINIMAL_STACK_SIZE = 128</code>.</li>
+    <li><code>configUSE_QUEUE_SETS = 1</code> → agregado a mano en <code>USER CODE</code> de <code>FreeRTOSConfig.h</code> (CubeMX no lo expone; así sobrevive a regeneraciones).</li>
+  </ul>
+</div>
+
+<!-- ============ 3. ARQUITECTURA ============ -->
+<div class="section">
+  <h2>3. Arquitectura de software</h2>
+  <p>Regla de oro: <b>todo el código de aplicación vive en <code>App/</code></b> (que CubeMX no toca);
+  <code>main.c</code> / <code>freertos.c</code> quedan solo con <i>glue</i> mínimo dentro de secciones
+  <code>USER CODE</code>. Después de cada <span class="kbd">Generate Code</span> se verifica que
+  <code>App/</code> sigue en el build y el glue quedó intacto.</p>
+
+  <figure class="fig">
+    <svg width="700" height="300" viewBox="0 0 700 300" font-family="Segoe UI">
+      <rect x="10" y="10" width="330" height="280" rx="10" fill="#eef7f7" stroke="#2e8b8b" stroke-width="2"/>
+      <text x="175" y="34" text-anchor="middle" font-size="13" font-weight="bold" fill="#123a5e">App/  (nuestro código)</text>
+
+      <rect x="30" y="48" width="290" height="52" rx="6" fill="#fff" stroke="#4a6fa5"/>
+      <text x="40" y="66" font-size="10" font-weight="bold" fill="#1a4d7a">Drivers</text>
+      <text x="40" y="82" font-size="8.5" fill="#5a6773">hc_sr04 · servo_mg90s · potentiometer</text>
+      <text x="40" y="94" font-size="8" fill="#8a97a3">HAL, multi-instancia, RTOS-agnósticos</text>
+
+      <rect x="30" y="108" width="290" height="46" rx="6" fill="#fff" stroke="#4a6fa5"/>
+      <text x="40" y="126" font-size="10" font-weight="bold" fill="#1a4d7a">Algoritmos (módulos puros)</text>
+      <text x="40" y="142" font-size="8.5" fill="#5a6773">kalman · pid  (solo float, testeables)</text>
+
+      <rect x="30" y="162" width="290" height="46" rx="6" fill="#fff" stroke="#4a6fa5"/>
+      <text x="40" y="180" font-size="10" font-weight="bold" fill="#1a4d7a">Tasks (una por archivo)</text>
+      <text x="40" y="196" font-size="8.5" fill="#5a6773">sensor · kalman · pid · motor · pot</text>
+
+      <rect x="30" y="216" width="290" height="60" rx="6" fill="#fff" stroke="#4a6fa5"/>
+      <text x="40" y="234" font-size="10" font-weight="bold" fill="#1a4d7a">Wiring / Config / Tests</text>
+      <text x="40" y="250" font-size="8.5" fill="#5a6773">app.c/.h · app_config.h · selftest</text>
+      <text x="40" y="264" font-size="8" fill="#8a97a3">App_Init() crea IPC + tasks</text>
+
+      <rect x="360" y="10" width="330" height="280" rx="10" fill="#f3f5f7" stroke="#9aa7b3" stroke-width="2"/>
+      <text x="525" y="34" text-anchor="middle" font-size="13" font-weight="bold" fill="#123a5e">Core/  (generado por CubeMX)</text>
+      <rect x="380" y="48" width="290" height="70" rx="6" fill="#fff" stroke="#c0392b" stroke-dasharray="4,3"/>
+      <text x="390" y="66" font-size="10" font-weight="bold" fill="#c0392b">main.c — solo glue (USER CODE)</text>
+      <text x="390" y="82" font-size="8.5" fill="#5a6773">#include "app.h"</text>
+      <text x="390" y="95" font-size="8.5" fill="#5a6773">App_Init();  // USER CODE 2</text>
+      <text x="390" y="108" font-size="8.5" fill="#5a6773">callbacks IC / TIM4  // USER CODE 4</text>
+
+      <rect x="380" y="126" width="290" height="40" rx="6" fill="#fff" stroke="#9aa7b3"/>
+      <text x="390" y="144" font-size="9.5" fill="#1a4d7a">FreeRTOSConfig.h</text>
+      <text x="390" y="158" font-size="8.5" fill="#5a6773">configUSE_QUEUE_SETS 1 (USER CODE)</text>
+
+      <rect x="380" y="174" width="290" height="34" rx="6" fill="#fff" stroke="#9aa7b3"/>
+      <text x="390" y="195" font-size="9.5" fill="#5a6773">freertos.c — <b>intacto</b> (sin tocar)</text>
+
+      <rect x="380" y="216" width="290" height="60" rx="6" fill="#fff" stroke="#9aa7b3"/>
+      <text x="390" y="234" font-size="9.5" fill="#1a4d7a">HAL / drivers generados</text>
+      <text x="390" y="250" font-size="8.5" fill="#5a6773">tim.c · adc.c · usart.c · gpio.c</text>
+      <text x="390" y="264" font-size="8.5" fill="#5a6773">stm32f4xx_it.c (TIM4_IRQHandler)</text>
+    </svg>
+    <figcaption>Figura 3 — Separación App/ (propio) vs Core/ (CubeMX). El puente es <code>app.h</code>.</figcaption>
+  </figure>
+
+  <h3>Estructura de carpetas</h3>
+  <pre><code>PIDController/
+├─ App/            ← TODO el código de aplicación (source folder en .cproject)
+│  ├─ Inc/  app.h app_config.h kalman.h pid.h selftest.h
+│  │        hc_sr04.h servo_mg90s.h potentiometer.h
+│  │        task_sensor.h task_kalman.h task_pid.h task_motor.h task_pot.h
+│  └─ Src/  (los .c correspondientes)
+├─ Core/          ← CubeMX (glue en USER CODE)
+├─ Drivers/ Middlewares/   ← HAL + FreeRTOS (generado)
+└─ PIDController.ioc</code></pre>
+</div>
+
+<!-- ============ 4. PIPELINE RTOS ============ -->
+<div class="section">
+  <h2>4. Pipeline de tiempo real</h2>
+  <p>El sistema son <b>5 tareas</b> conectadas por <b>4 colas</b> (profundidad 1), un <b>queue set</b>
+  en el PID y <b>2 semáforos binarios</b> disparados desde ISRs.</p>
+
+  <figure class="fig">
+    <svg width="710" height="360" viewBox="0 0 710 360" font-family="Segoe UI">
+      <defs>
+        <marker id="a3" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#1a4d7a"/></marker>
+        <marker id="a3s" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#c0392b"/></marker>
+      </defs>
+      <!-- ISRs -->
+      <rect x="20" y="20" width="120" height="40" rx="6" fill="#fdeef0" stroke="#c0392b" stroke-width="1.6"/>
+      <text x="80" y="38" text-anchor="middle" font-size="9.5" font-weight="bold" fill="#c0392b">ISR TIM4</text>
+      <text x="80" y="52" text-anchor="middle" font-size="8" fill="#7a4">cada 100 ms</text>
+      <rect x="20" y="150" width="120" height="40" rx="6" fill="#fdeef0" stroke="#c0392b" stroke-width="1.6"/>
+      <text x="80" y="168" text-anchor="middle" font-size="9.5" font-weight="bold" fill="#c0392b">ISR Input Capture</text>
+      <text x="80" y="182" text-anchor="middle" font-size="8" fill="#7a4">TIM2 (echo)</text>
+
+      <!-- Tasks -->
+      <g>
+        <rect x="200" y="80" width="130" height="52" rx="8" fill="#eef4f8" stroke="#1a4d7a" stroke-width="2"/>
+        <text x="265" y="100" text-anchor="middle" font-size="11" font-weight="bold" fill="#123a5e">SensorTask</text>
+        <text x="265" y="116" text-anchor="middle" font-size="8.5" fill="#5a6773">prio 5</text>
+
+        <rect x="390" y="80" width="130" height="52" rx="8" fill="#e8f0fe" stroke="#4a6fa5" stroke-width="2"/>
+        <text x="455" y="100" text-anchor="middle" font-size="11" font-weight="bold" fill="#123a5e">KalmanTask</text>
+        <text x="455" y="116" text-anchor="middle" font-size="8.5" fill="#5a6773">prio 4</text>
+
+        <rect x="390" y="210" width="130" height="52" rx="8" fill="#fef3e0" stroke="#d98324" stroke-width="2"/>
+        <text x="455" y="230" text-anchor="middle" font-size="11" font-weight="bold" fill="#123a5e">PidTask</text>
+        <text x="455" y="246" text-anchor="middle" font-size="8.5" fill="#5a6773">prio 3 · Queue Set</text>
+
+        <rect x="200" y="210" width="130" height="52" rx="8" fill="#fdeef0" stroke="#c0392b" stroke-width="2"/>
+        <text x="265" y="230" text-anchor="middle" font-size="11" font-weight="bold" fill="#123a5e">PotTask</text>
+        <text x="265" y="246" text-anchor="middle" font-size="8.5" fill="#5a6773">prio 1 · cada 200 ms</text>
+
+        <rect x="570" y="210" width="120" height="52" rx="8" fill="#e9f7ef" stroke="#2e8b57" stroke-width="2"/>
+        <text x="630" y="230" text-anchor="middle" font-size="11" font-weight="bold" fill="#123a5e">MotorTask</text>
+        <text x="630" y="246" text-anchor="middle" font-size="8.5" fill="#5a6773">prio 4</text>
+      </g>
+
+      <!-- semaforos (rojo) -->
+      <line x1="140" y1="40" x2="198" y2="90" stroke="#c0392b" stroke-width="1.8" marker-end="url(#a3s)"/>
+      <text x="150" y="58" font-size="8" fill="#c0392b">SemTimer</text>
+      <line x1="140" y1="170" x2="198" y2="120" stroke="#c0392b" stroke-width="1.8" marker-end="url(#a3s)"/>
+      <text x="145" y="150" font-size="8" fill="#c0392b">SemSensor</text>
+
+      <!-- colas (azul) -->
+      <line x1="330" y1="106" x2="388" y2="106" stroke="#1a4d7a" stroke-width="2" marker-end="url(#a3)"/>
+      <text x="359" y="99" text-anchor="middle" font-size="8" fill="#1a4d7a">QueuePos</text>
+
+      <line x1="455" y1="132" x2="455" y2="208" stroke="#1a4d7a" stroke-width="2" marker-end="url(#a3)"/>
+      <text x="500" y="174" text-anchor="middle" font-size="8" fill="#1a4d7a">QueuePosFil</text>
+
+      <line x1="330" y1="236" x2="388" y2="236" stroke="#1a4d7a" stroke-width="2" marker-end="url(#a3)"/>
+      <text x="359" y="229" text-anchor="middle" font-size="8" fill="#1a4d7a">QueueObjetivo</text>
+
+      <line x1="520" y1="236" x2="568" y2="236" stroke="#1a4d7a" stroke-width="2" marker-end="url(#a3)"/>
+      <text x="544" y="229" text-anchor="middle" font-size="8" fill="#1a4d7a">QueueAngulo</text>
+
+      <!-- salida servo -->
+      <line x1="630" y1="262" x2="630" y2="310" stroke="#2e8b57" stroke-width="2" marker-end="url(#a3)"/>
+      <rect x="560" y="310" width="140" height="34" rx="6" fill="#e9f7ef" stroke="#2e8b57"/>
+      <text x="630" y="331" text-anchor="middle" font-size="9" fill="#123a5e">PWM servo + toggle LD2</text>
+
+      <!-- leyenda -->
+      <rect x="200" y="300" width="14" height="8" fill="#c0392b"/><text x="220" y="308" font-size="8" fill="#5a6773">semáforo (ISR→task)</text>
+      <rect x="200" y="316" width="14" height="8" fill="#1a4d7a"/><text x="220" y="324" font-size="8" fill="#5a6773">cola float depth-1 (xQueueOverwrite)</text>
+    </svg>
+    <figcaption>Figura 4 — Pipeline completo: ISRs, 5 tasks, colas y queue set.</figcaption>
+  </figure>
+
+  <table class="nobreak">
+    <tr><th>Task</th><th>Prio</th><th>Espera / recibe</th><th>Produce</th></tr>
+    <tr><td>SensorTask</td><td>5</td><td>SemTimer (+ SemSensor)</td><td>QueuePos</td></tr>
+    <tr><td>KalmanTask</td><td>4</td><td>QueuePos</td><td>QueuePosFil</td></tr>
+    <tr><td>PidTask</td><td>3</td><td>QueueSet{QueuePosFil, QueueObjetivo}</td><td>QueueAngulo</td></tr>
+    <tr><td>MotorTask</td><td>4</td><td>QueueAngulo</td><td>PWM servo + LD2</td></tr>
+    <tr><td>PotTask</td><td>1</td><td>temporizada (200 ms)</td><td>QueueObjetivo</td></tr>
+  </table>
+
+  <h3>Cronología de un ciclo (100 ms)</h3>
+  <figure class="fig">
+    <svg width="700" height="150" viewBox="0 0 700 150" font-family="Segoe UI">
+      <line x1="20" y1="120" x2="680" y2="120" stroke="#9aa7b3" stroke-width="1.5"/>
+      <text x="20" y="140" font-size="8" fill="#7a8793">t=0</text>
+      <text x="640" y="140" font-size="8" fill="#7a8793">t=100 ms</text>
+      <!-- eventos -->
+      <g font-size="8" fill="#123a5e" text-anchor="middle">
+        <line x1="60" y1="60" x2="60" y2="120" stroke="#c0392b" stroke-width="2"/>
+        <rect x="30" y="42" width="60" height="18" fill="#fdeef0" stroke="#c0392b"/><text x="60" y="55">TIM4 tick</text>
+        <line x1="170" y1="60" x2="170" y2="120" stroke="#1a4d7a" stroke-width="2"/>
+        <rect x="120" y="42" width="100" height="18" fill="#eef4f8" stroke="#1a4d7a"/><text x="170" y="55">Sensor: TRIG</text>
+        <line x1="300" y1="70" x2="300" y2="120" stroke="#c0392b" stroke-width="2"/>
+        <rect x="255" y="72" width="90" height="18" fill="#fdeef0" stroke="#c0392b"/><text x="300" y="85">echo (IC ISR)</text>
+        <line x1="410" y1="60" x2="410" y2="120" stroke="#4a6fa5" stroke-width="2"/>
+        <rect x="375" y="42" width="70" height="18" fill="#e8f0fe" stroke="#4a6fa5"/><text x="410" y="55">Kalman</text>
+        <line x1="510" y1="60" x2="510" y2="120" stroke="#d98324" stroke-width="2"/>
+        <rect x="485" y="42" width="50" height="18" fill="#fef3e0" stroke="#d98324"/><text x="510" y="55">PID</text>
+        <line x1="600" y1="60" x2="600" y2="120" stroke="#2e8b57" stroke-width="2"/>
+        <rect x="565" y="42" width="70" height="18" fill="#e9f7ef" stroke="#2e8b57"/><text x="600" y="55">Motor</text>
+      </g>
+      <text x="350" y="16" text-anchor="middle" font-size="9" fill="#5a6773">El tick de TIM4 dispara toda la cadena; termina antes del próximo tick.</text>
+    </svg>
+    <figcaption>Figura 5 — Secuencia temporal disparada por el tick de 100 ms.</figcaption>
+  </figure>
+
+  <div class="note">Las colas son <code>float</code> de <b>profundidad 1</b> con <code>xQueueOverwrite</code>:
+  siempre gana el dato más reciente (control en tiempo real, no encolar históricos). El <b>queue set</b>
+  deja al PID bloquear en dos fuentes (posición filtrada y setpoint) con una sola primitiva.</div>
+</div>
+
+<!-- ============ 5. DRIVERS ============ -->
+<div class="section">
+  <h2>5. Drivers de periféricos</h2>
+  <p>Los tres son <b>multi-instancia</b> y <b>RTOS-agnósticos</b> (solo HAL).</p>
+
+  <h3>5.1 <code>hc_sr04</code> — sensor ultrasónico (Input Capture, por interrupción)</h3>
+  <ul>
+    <li><code>HC_SR04_Init(h, htim, ch, trig_port, trig_pin)</code> — configura y registra la instancia.</li>
+    <li><code>HC_SR04_SetRange / SetCompleteCallback</code> — rango válido y hook de fin de medición.</li>
+    <li><code>HC_SR04_Trigger(h)</code> — pulso de 10 µs + arma captura (único busy-wait, inofensivo).</li>
+    <li><code>HC_SR04_GetDistance(h,&cm)</code> — no bloqueante: OK / BUSY / TIMEOUT / INVALID.</li>
+    <li><code>HC_SR04_HandleInterrupt(htim)</code> — dispatcher desde el callback global del HAL.</li>
+  </ul>
+  <figure class="fig">
+    <svg width="640" height="130" viewBox="0 0 640 130" font-family="Segoe UI">
+      <defs><marker id="a4" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#1a4d7a"/></marker></defs>
+      <rect x="30" y="45" width="120" height="44" rx="22" fill="#eef4f8" stroke="#1a4d7a" stroke-width="2"/>
+      <text x="90" y="71" text-anchor="middle" font-size="11" font-weight="bold" fill="#123a5e">IDLE</text>
+      <rect x="260" y="45" width="120" height="44" rx="22" fill="#e8f0fe" stroke="#4a6fa5" stroke-width="2"/>
+      <text x="320" y="66" text-anchor="middle" font-size="10" font-weight="bold" fill="#123a5e">WAIT_RISE</text>
+      <text x="320" y="80" text-anchor="middle" font-size="8" fill="#5a6773">espera subida</text>
+      <rect x="490" y="45" width="120" height="44" rx="22" fill="#fef3e0" stroke="#d98324" stroke-width="2"/>
+      <text x="550" y="66" text-anchor="middle" font-size="10" font-weight="bold" fill="#123a5e">WAIT_FALL</text>
+      <text x="550" y="80" text-anchor="middle" font-size="8" fill="#5a6773">espera bajada</text>
+      <line x1="150" y1="60" x2="258" y2="60" stroke="#1a4d7a" stroke-width="1.8" marker-end="url(#a4)"/>
+      <text x="204" y="52" text-anchor="middle" font-size="8" fill="#1a4d7a">Trigger()</text>
+      <line x1="380" y1="60" x2="488" y2="60" stroke="#1a4d7a" stroke-width="1.8" marker-end="url(#a4)"/>
+      <text x="434" y="52" text-anchor="middle" font-size="8" fill="#1a4d7a">t_rise</text>
+      <path d="M550,89 C550,120 90,120 90,91" fill="none" stroke="#2e8b57" stroke-width="1.8" marker-end="url(#a4)"/>
+      <text x="320" y="118" text-anchor="middle" font-size="8" fill="#2e8b57">t_fall → distancia = (t_fall−t_rise)/58 cm → callback</text>
+    </svg>
+    <figcaption>Figura 6 — Máquina de estados del HC-SR04 (una medición completa).</figcaption>
+  </figure>
+
+  <h3>5.2 <code>servo_mg90s</code> — servo por PWM</h3>
+  <p>Con el timer a 1 µs/tick y ARR=19999, el registro CCR (en cuentas) <b>equivale al ancho de pulso en
+  µs</b>. API: <code>Servo_Init</code>, <code>Servo_SetLimits</code> (calibración), <code>Servo_SetPulseUs</code>,
+  <code>Servo_SetAngle</code> (mapea grados→µs y clampea), <code>Servo_GetPulseUs</code>.</p>
+
+  <h3>5.3 <code>potentiometer</code> — potenciómetro por ADC (polling)</h3>
+  <p>Lee sin DMA ni IRQ (baja frecuencia). API: <code>Pot_Init</code> (full_scale 4095 = 12 bits),
+  <code>Pot_ReadRaw</code>, <code>Pot_ReadPosition_cm</code> (mapea crudo → cm en [0, range_cm]).</p>
+</div>
+
+<!-- ============ 6. ALGORITMOS ============ -->
+<div class="section">
+  <h2>6. Algoritmos: Kalman y PID</h2>
+
+  <h3>6.1 Filtro de Kalman (2 estados)</h3>
+  <p>Estado <code>x = [posición, velocidad]</code>, modelo de <b>velocidad constante</b>, paso
+  <code>dt</code> fijo (0.1 s). Suaviza el ruido del HC-SR04 estimando también la velocidad.</p>
+  <table class="nobreak">
+    <tr><th>Matriz</th><th>Valor</th><th>Rol</th></tr>
+    <tr><td>F</td><td>[[1, dt],[0, 1]]</td><td>transición (posición avanza con la velocidad)</td></tr>
+    <tr><td>H</td><td>[1, 0]</td><td>medición (solo se observa la posición)</td></tr>
+    <tr><td>Q</td><td>q·[[dt³/3, dt²/2],[dt²/2, dt]]</td><td>ruido de proceso (↑q = más responsivo)</td></tr>
+    <tr><td>R</td><td>escalar (~0.09)</td><td>varianza de medición del sensor</td></tr>
+  </table>
+  <p>Ciclo por muestra: <b>predicción</b> (<code>x=Fx</code>, <code>P=FPFᵀ+Q</code>) + <b>corrección</b>
+  con la ganancia de Kalman. API: <code>Kalman_Init</code>, <code>Kalman_Update(z)</code> (devuelve la
+  posición estimada), <code>Kalman_Reset</code>.</p>
+
+  <h3>6.2 Controlador PID</h3>
+  <figure class="fig">
+    <svg width="700" height="200" viewBox="0 0 700 200" font-family="Segoe UI">
+      <defs><marker id="a5" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#3a4550"/></marker></defs>
+      <circle cx="70" cy="100" r="18" fill="#fff" stroke="#c0392b" stroke-width="2"/>
+      <text x="70" y="105" text-anchor="middle" font-size="13" fill="#c0392b">Σ</text>
+      <text x="30" y="80" font-size="9" fill="#5a6773">setpoint</text>
+      <text x="30" y="135" font-size="9" fill="#5a6773">medición</text>
+      <line x1="10" y1="90" x2="52" y2="95" stroke="#3a4550" stroke-width="1.6" marker-end="url(#a5)"/>
+      <line x1="10" y1="130" x2="52" y2="107" stroke="#3a4550" stroke-width="1.6" marker-end="url(#a5)"/>
+      <text x="100" y="94" font-size="9" fill="#5a6773">error</text>
+      <line x1="88" y1="100" x2="150" y2="100" stroke="#3a4550" stroke-width="1.6" marker-end="url(#a5)"/>
+
+      <rect x="150" y="30" width="120" height="34" rx="6" fill="#fef3e0" stroke="#d98324"/><text x="210" y="52" text-anchor="middle" font-size="10" fill="#123a5e">P: Kp·error</text>
+      <rect x="150" y="83" width="120" height="34" rx="6" fill="#fef3e0" stroke="#d98324"/><text x="210" y="105" text-anchor="middle" font-size="10" fill="#123a5e">I: Ki·∫error·dt</text>
+      <rect x="150" y="136" width="120" height="34" rx="6" fill="#fef3e0" stroke="#d98324"/><text x="210" y="153" text-anchor="middle" font-size="9.5" fill="#123a5e">D: −Kd·d(medición)</text>
+      <text x="210" y="166" text-anchor="middle" font-size="7.5" fill="#8a97a3">sin derivative-kick</text>
+
+      <circle cx="340" cy="100" r="18" fill="#fff" stroke="#c0392b" stroke-width="2"/><text x="340" y="105" text-anchor="middle" font-size="13" fill="#c0392b">Σ</text>
+      <line x1="270" y1="47" x2="322" y2="92" stroke="#3a4550" stroke-width="1.4" marker-end="url(#a5)"/>
+      <line x1="270" y1="100" x2="320" y2="100" stroke="#3a4550" stroke-width="1.4" marker-end="url(#a5)"/>
+      <line x1="270" y1="153" x2="322" y2="108" stroke="#3a4550" stroke-width="1.4" marker-end="url(#a5)"/>
+
+      <rect x="400" y="82" width="130" height="36" rx="6" fill="#e9f7ef" stroke="#2e8b57"/><text x="465" y="99" text-anchor="middle" font-size="9.5" fill="#123a5e">saturación ±límite</text><text x="465" y="112" text-anchor="middle" font-size="7.5" fill="#8a97a3">+ anti-windup</text>
+      <line x1="358" y1="100" x2="398" y2="100" stroke="#3a4550" stroke-width="1.6" marker-end="url(#a5)"/>
+
+      <rect x="560" y="82" width="120" height="36" rx="6" fill="#f3e9f7" stroke="#8e44ad"/><text x="620" y="99" text-anchor="middle" font-size="9.5" fill="#123a5e">ángulo = 90+u</text><text x="620" y="112" text-anchor="middle" font-size="7.5" fill="#8a97a3">→ servo</text>
+      <line x1="530" y1="100" x2="558" y2="100" stroke="#3a4550" stroke-width="1.6" marker-end="url(#a5)"/>
+    </svg>
+    <figcaption>Figura 7 — Estructura del PID: derivada sobre la medición, anti-windup y saturación.</figcaption>
+  </figure>
+  <ul>
+    <li><b>Derivada sobre la medición</b> (no el error) → sin <i>derivative-kick</i> al mover el setpoint.</li>
+    <li><b>Anti-windup</b> por integración condicional (<i>clamping</i>): si la salida satura y el error
+      empuja más hacia la saturación, congela el integrador.</li>
+    <li><b>Saturación</b> a <code>[out_min, out_max]</code> (±20° alrededor del centro).</li>
+    <li>API: <code>PID_Init</code>, <code>PID_SetLimits</code>, <code>PID_Compute(sp, meas)</code>, <code>PID_Reset</code>.</li>
+  </ul>
+</div>
+
+<!-- ============ 7. WIRING / TASKS / GLUE ============ -->
+<div class="section">
+  <h2>7. Wiring, tasks y glue</h2>
+
+  <h3>7.1 <code>app.c / app.h</code> — capa de wiring</h3>
+  <p>Es lo único que <code>main.c</code> necesita conocer. Contiene las instancias globales
+  (<code>g_sensor</code>, <code>g_servo</code>, <code>g_pot</code>), los objetos de IPC (semáforos,
+  colas, queue set) y los hooks de ISR.</p>
+  <ul>
+    <li><b><code>App_Init()</code></b> (desde <code>USER CODE 2</code>): crea semáforos y colas
+      (chequeo NULL → <code>Error_Handler</code>), arma el queue set, <code>Pot_Init</code>, arranca
+      <code>HAL_TIM_Base_Start_IT(&htim4)</code> y crea las 5 tasks.</li>
+    <li><code>App_OnSensorComplete_FromISR</code> / <code>App_OnTimerTick_FromISR</code> — dan los semáforos.</li>
+    <li><code>__io_putchar</code> — retarget de <code>printf</code> a USART2.</li>
+    <li><code>App_LogTrace</code> — imprime <code>z, fil, sp, u, ang</code> (formato <code>%d.%03d</code>, sin <code>%f</code>).</li>
+  </ul>
+
+  <h3>7.2 <code>app_config.h</code> — el único lugar para tunear</h3>
+  <p>Stacks y prioridades de las tasks, rangos del sensor/pote, ganancias de Kalman y PID, calibración
+  del servo y los flags de compilación. <b>Tunear el sistema = editar este archivo.</b></p>
+
+  <h3>7.3 Glue en <code>Core/</code></h3>
+  <pre><code>// main.c — USER CODE Includes
+#include "app.h"
+
+// main.c — USER CODE 2
+App_Init();
+
+// main.c — USER CODE 4
+void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim){ HC_SR04_HandleInterrupt(htim); }
+
+// main.c — HAL_TIM_PeriodElapsedCallback, USER CODE Callback 1
+if (htim->Instance == TIM4) { App_OnTimerTick_FromISR(); }
+
+// FreeRTOSConfig.h — USER CODE Defines
+#define configUSE_QUEUE_SETS 1</code></pre>
+  <p>La ISR <code>TIM4_IRQHandler</code> (en <code>stm32f4xx_it.c</code>, generada por CubeMX) llama
+  <code>HAL_TIM_IRQHandler(&htim4)</code>, que a su vez dispara nuestro <code>HAL_TIM_PeriodElapsedCallback</code>.</p>
+</div>
+
+<!-- ============ 8. FLAGS ============ -->
+<div class="section">
+  <h2>8. Flags de compilación (<code>app_config.h</code>)</h2>
+  <table>
+    <tr><th>Flag</th><th>Producción</th><th>Qué hace en 1</th></tr>
+    <tr><td><code>APP_RUN_SELFTESTS</code></td><td>0</td><td>Corre <code>SelfTest_Run()</code> al arrancar (PASS/FAIL por UART) antes de crear el lazo.</td></tr>
+    <tr><td><code>APP_USE_SYNTHETIC_SENSOR</code></td><td>0</td><td>Reemplaza el sensor por una señal sintética y el pote por un setpoint fijo — valida la cadena sin hardware.</td></tr>
+    <tr><td><code>APP_LOG_ENABLED</code></td><td>0</td><td>Imprime la traza <code>z, fil, sp, u, ang</code> por UART (subir para el tuning; bajar en producción por la latencia del UART).</td></tr>
+  </table>
+
+  <h3>Self-tests (módulo <code>selftest</code>)</h3>
+  <p>Todo el <code>.c</code> está dentro de <code>#if APP_RUN_SELFTESTS</code> (con el flag en 0 no aporta
+  código). Casos: convergencia de Kalman, atenuación de outlier, seguimiento de rampa, R grande vs chico;
+  y en PID: solo-P exacto, saturación, sin derivative-kick, anti-windup vs sin AW, y un lazo simulado que
+  converge al setpoint.</p>
+</div>
+
+<!-- ============ 9. DECISIONES E HISTORIAL ============ -->
+<div class="section">
+  <h2>9. Decisiones de diseño e historial</h2>
+  <h3>Por qué está hecho así</h3>
+  <table class="nobreak">
+    <tr><th>Decisión</th><th>Motivo</th></tr>
+    <tr><td>Todo en <code>App/</code></td><td>Robustez ante regeneración de CubeMX (premisa central)</td></tr>
+    <tr><td>API nativa de FreeRTOS, <code>freertos.c</code> intacto</td><td>Estilo del proyecto de referencia</td></tr>
+    <tr><td>Colas depth-1 + <code>xQueueOverwrite</code></td><td>Tiempo real: siempre el dato más nuevo, no encolar históricos</td></tr>
+    <tr><td>Queue set (no mutex/flags)</td><td>El PID espera dos eventos con una sola primitiva bloqueante</td></tr>
+    <tr><td>Módulos puros Kalman/PID</td><td>Testeables (y compilables en host si hubiera gcc)</td></tr>
+    <tr><td>Tests detrás de flag</td><td>Validar sin ensuciar el binario de producción</td></tr>
+    <tr><td><code>%d.%03d</code> en vez de <code>%f</code></td><td>newlib-nano no imprime floats por defecto</td></tr>
+    <tr><td>NVIC prio 5 en TIM2/TIM4</td><td>Requisito de FreeRTOS para <code>...FromISR()</code></td></tr>
+  </table>
+
+  <h3>Historial de construcción (git)</h3>
+  <ol style="font-size:9.5pt;">
+    <li><code>chore:</code> baseline + driver servo</li>
+    <li><code>refactor:</code> mover app a <code>App/</code> y glue mínimo en main.c</li>
+    <li><code>feat:</code> CubeMX ADC1 (pote), TIM4 100ms, heap y queue sets</li>
+    <li><code>feat:</code> módulos puros Kalman y PID + self-tests (opt-in)</li>
+    <li><code>feat:</code> pipeline FreeRTOS (5 tasks, 4 colas, queue set, semáforos) + smoke-test</li>
+    <li><code>feat:</code> lazo cerrado real + tuning inicial</li>
+    <li><code>chore:</code> ajuste de stacks, gating de logs, verificación post-regeneración</li>
+    <li><code>fix:</code> setpoint fijo en modo sensor sintético</li>
+    <li><code>merge:</code> arquitectura completa (Etapas 0–6, validada por smoke test)</li>
+  </ol>
+  <div class="note"><b>Estado:</b> software completo, compila, arranca y validado por el smoke test
+  sintético. Pendiente solo el montaje físico + tuning — ver <b>GUIA_CONTINUACION_HARDWARE.md</b>.</div>
+</div>
+
+</body>
+</html>
