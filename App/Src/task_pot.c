@@ -21,6 +21,16 @@ void PotTask(void *argument)
 
   TickType_t last = xTaskGetTickCount();
 
+#if APP_USE_SYNTHETIC_SENSOR
+  /* Sin pote real (smoke test): setpoint fijo al centro del rango, para no leer
+   * un ADC flotante y tener una traza limpia. La task igual vive (delay). */
+  float sp_fijo = (SENSOR_MIN_CM + SENSOR_MAX_CM) * 0.5f;
+  xQueueOverwrite(QueueObjetivo, &sp_fijo);
+  for (;;)
+  {
+    vTaskDelayUntil(&last, pdMS_TO_TICKS(POT_PERIOD_MS));
+  }
+#else
   for (;;)
   {
     vTaskDelayUntil(&last, pdMS_TO_TICKS(POT_PERIOD_MS));
@@ -31,4 +41,5 @@ void PotTask(void *argument)
       xQueueOverwrite(QueueObjetivo, &cm);
     }
   }
+#endif
 }
