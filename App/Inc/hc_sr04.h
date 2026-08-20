@@ -30,7 +30,6 @@ extern "C" {
 
 #include "main.h"   /* trae stm32f4xx_hal.h y los tipos HAL */
 #include <stdint.h>
-#include <stdbool.h>
 
 /* Estados de retorno de la API */
 typedef enum {
@@ -72,7 +71,7 @@ struct HC_SR04_Handle {
     volatile uint32_t t_rise;      /* captura del flanco de subida [us]      */
     volatile uint32_t t_fall;      /* captura del flanco de bajada [us]      */
     volatile float    distance_cm; /* ultima distancia calculada             */
-    volatile bool     data_ready;  /* hay dato nuevo sin leer                */
+    volatile uint8_t  data_ready;  /* hay dato nuevo sin leer (0/1)          */
     uint32_t          trigger_tick;/* HAL_GetTick() al disparar (timeout)    */
 
     /* --- Hook opcional --- */
