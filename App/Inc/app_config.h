@@ -12,12 +12,15 @@
 
 /* --- Tasks (prioridades del anteproyecto) --------------------------------- *
  * Stack en WORDS (no bytes). Prioridad mayor = mas urgente.                  *
- * Sensor 5, Kalman 4, Motor 4, PID 3, Pot 1.                                 */
+ * Sensor 5, Kalman 4, Motor 4, PID 3, Pot 1.                                 *
+ * Stacks dimensionados por rol; verificar margen real con                    *
+ * uxTaskGetStackHighWaterMark (INCLUDE ya activo) y ajustar. La PID lleva mas *
+ * porque hace printf (App_LogTrace) cuando el log esta activo.               */
 #define SENSOR_TASK_STACK       256u
 #define KALMAN_TASK_STACK       256u
-#define PID_TASK_STACK          256u
-#define MOTOR_TASK_STACK        256u
-#define POT_TASK_STACK          256u
+#define PID_TASK_STACK          384u
+#define MOTOR_TASK_STACK        192u
+#define POT_TASK_STACK          192u
 
 #define SENSOR_TASK_PRIO        5u
 #define KALMAN_TASK_PRIO        4u
@@ -37,7 +40,7 @@
 /* --- Flags de test / diagnostico (opt-in; produccion en 0 salvo LOG) ------ */
 #define APP_RUN_SELFTESTS       0       /* 1 = corre self-tests al arrancar    */
 #define APP_USE_SYNTHETIC_SENSOR 0      /* 1 = sensor sintetico (valida cadena sin HW) */
-#define APP_LOG_ENABLED         1       /* 1 = traza del lazo por UART (Etapa 6 la apaga) */
+#define APP_LOG_ENABLED         0       /* 1 = traza del lazo por UART (subir para tuning) */
 
 /* --- Filtro de Kalman ----------------------------------------------------- */
 #define KALMAN_DT               0.1f    /* 100 ms (tick del sensor)            */
