@@ -1,9 +1,10 @@
 /**
   ******************************************************************************
   * @file    task_sensor.c
-  * @brief   Task del sensor HC-SR04. Dispara una medicion, se bloquea hasta el
-  *          aviso de la ISR (sin polling ni busy-wait), lee la distancia y la
-  *          reporta por UART. Comportamiento identico al baseline (Etapa 0).
+  * @brief   Task del sensor (prio 5). Se despierta con SemTimer (tick de 100 ms
+  *          de TIM4), dispara el HC-SR04, espera el echo (SemSensor) y publica
+  *          la distancia cruda en QueuePos. Con APP_USE_SYNTHETIC_SENSOR=1
+  *          genera una señal sintetica para validar la cadena sin hardware.
   ******************************************************************************
   */
 
@@ -14,50 +15,60 @@
 #include "FreeRTOS.h"
 #include "task.h"
 #include "semphr.h"
+#include "queue.h"
 #include "tim.h"        /* htim2 */
-#include <stdio.h>
 
-/* Task del sensor: dispara, se bloquea hasta el aviso de la ISR, lee y reporta.
- * No hace polling ni busy-wait: mientras espera el echo, la CPU queda libre. */
 void SensorTask(void *argument)
 {
   (void)argument;
 
+#if !APP_USE_SYNTHETIC_SENSOR
   HC_SR04_Init(&g_sensor, &htim2, TIM_CHANNEL_1, TRIG_GPIO_Port, TRIG_Pin);
-  HC_SR04_SetRange(&g_sensor, SENSOR_MIN_CM, SENSOR_MAX_CM);   /* ajustar al largo de la barra */
+  HC_SR04_SetRange(&g_sensor, SENSOR_MIN_CM, SENSOR_MAX_CM);
   HC_SR04_SetCompleteCallback(&g_sensor, App_OnSensorComplete_FromISR);
+#else
+  uint32_t k = 0;
+#endif
 
   for (;;)
   {
+    /* Espera el tick hard-real-time de 100 ms (lo da la ISR de TIM4). */
+    if (xSemaphoreTake(SemTimer, portMAX_DELAY) != pdTRUE) { continue; }
+
+#if APP_USE_SYNTHETIC_SENSOR
+    /* Señal sintetica: triangular entre min y max (periodo ~4 s) + un poco de
+     * "ruido" deterministico para que el Kalman tenga algo que suavizar. */
+    const uint32_t period = 40u, half = 20u;
+    uint32_t phase = k % period;
+    float frac = (phase < half) ? ((float)phase / (float)half)
+                                : ((float)(period - phase) / (float)half);
+    float z = SENSOR_MIN_CM + frac * (SENSOR_MAX_CM - SENSOR_MIN_CM);
+    z += (k & 1u) ? 0.3f : -0.3f;
+    k++;
+    g_dbg_raw = z;
+    xQueueOverwrite(QueuePos, &z);
+#else
     /* Descartar cualquier aviso viejo para esperar SOLO esta medicion. */
-    (void)xSemaphoreTake(g_sensorSem, 0);
+    (void)xSemaphoreTake(SemSensor, 0);
 
     if (HC_SR04_Trigger(&g_sensor) == HC_SR04_OK)
     {
-      /* Bloqueo hasta el aviso de la ISR (guarda > timeout interno). */
-      if (xSemaphoreTake(g_sensorSem, pdMS_TO_TICKS(SENSOR_ECHO_TIMEOUT_MS)) == pdTRUE)
+      if (xSemaphoreTake(SemSensor, pdMS_TO_TICKS(SENSOR_ECHO_TIMEOUT_MS)) == pdTRUE)
       {
         float dist = 0.0f;
-        HC_SR04_Status st = HC_SR04_GetDistance(&g_sensor, &dist);
-        if (st == HC_SR04_OK) {
-          /* Sin %f (newlib-nano no lo imprime por defecto): parte entera y 1 decimal. */
-          int entero   = (int)dist;
-          int decima   = (int)((dist - (float)entero) * 10.0f);
-          printf("Distancia: %d.%d cm\r\n", entero, decima);
-          /* TODO (etapa siguiente): alimentar el lazo PID con 'dist'. */
-        } else if (st == HC_SR04_INVALID) {
-          printf("Fuera de rango\r\n");
+        if (HC_SR04_GetDistance(&g_sensor, &dist) == HC_SR04_OK)
+        {
+          g_dbg_raw = dist;
+          xQueueOverwrite(QueuePos, &dist);
         }
       }
       else
       {
-        /* No llego el echo: GetDistance detecta el timeout y resetea la FSM a IDLE. */
+        /* Sin echo: GetDistance detecta el timeout y resetea la FSM a IDLE. */
         float dummy = 0.0f;
         (void)HC_SR04_GetDistance(&g_sensor, &dummy);
-        printf("TIMEOUT\r\n");
       }
     }
-
-    vTaskDelay(pdMS_TO_TICKS(SENSOR_PERIOD_MS));   /* ~20 Hz de muestreo (ajustable segun el PID) */
+#endif
   }
 }
