@@ -47,10 +47,6 @@ void PidTask(void *argument)
         float u     = PID_Compute(&pid, setpoint, pos_fil);
         float angle = SERVO_CENTER_DEG + u;          /* u en grados relativos al centro */
         xQueueOverwrite(QueueAngulo, &angle);
-
-#if APP_LOG_ENABLED
-        App_LogTrace(g_dbg_raw, pos_fil, setpoint, u, angle);
-#endif
       }
     }
   }

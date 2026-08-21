@@ -40,9 +40,6 @@ extern QueueHandle_t QueueAngulo;    /* pid     -> motor   (angulo)           */
 /* --- Queue set del PID (bloquea en QueuePosFil + QueueObjetivo a la vez) --- */
 extern QueueSetHandle_t QueueSetPid;
 
-/* --- Debug: ultima muestra cruda publicada (para la traza del PID) -------- */
-extern volatile float g_dbg_raw;
-
 /**
   * @brief  Crea IPC + tasks y arranca los perifericos de tiempo real.
   *         Llamar una sola vez desde USER CODE 2 de main.c.
@@ -54,9 +51,6 @@ void App_OnSensorComplete_FromISR(HC_SR04_HandleTypeDef *h);
 
 /** @brief Hook del TIM4 (ISR cada 100 ms): da SemTimer (tick del sensor). */
 void App_OnTimerTick_FromISR(void);
-
-/** @brief Imprime una linea de traza del lazo por UART (formato sin %f). */
-void App_LogTrace(float z, float pos_fil, float sp, float u, float angle);
 
 #ifdef __cplusplus
 }

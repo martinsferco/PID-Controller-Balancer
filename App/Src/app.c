@@ -14,16 +14,13 @@
 #include "task_pid.h"
 #include "task_motor.h"
 #include "task_pot.h"
-#include "selftest.h"
 
 #include "FreeRTOS.h"
 #include "task.h"
 #include "queue.h"
 #include "semphr.h"
-#include "usart.h"      /* huart2, para el retarget de printf */
 #include "tim.h"        /* htim4 */
 #include "adc.h"        /* hadc1 */
-#include <stdio.h>
 
 /* --- Instancias de drivers ------------------------------------------------ */
 HC_SR04_HandleTypeDef g_sensor;
@@ -40,9 +37,6 @@ QueueHandle_t    QueuePosFil;
 QueueHandle_t    QueueObjetivo;
 QueueHandle_t    QueueAngulo;
 QueueSetHandle_t QueueSetPid;
-
-/* --- Debug -------------------------------------------------------------- */
-volatile float g_dbg_raw = 0.0f;
 
 /* ====================== Hooks de ISR ======================= */
 
@@ -63,44 +57,10 @@ void App_OnTimerTick_FromISR(void)
   portYIELD_FROM_ISR(hpw);
 }
 
-/* ====================== Utilitarios ======================== */
-
-/* Retarget de printf hacia USART2 (COM virtual del ST-Link). */
-int __io_putchar(int ch)
-{
-  HAL_UART_Transmit(&huart2, (uint8_t *)&ch, 1, HAL_MAX_DELAY);
-  return ch;
-}
-
-/* Imprime un float como signo + entero + 3 decimales (newlib-nano sin %f). */
-static void print_f(float v)
-{
-  if (v < 0.0f) { printf("-"); v = -v; }
-  int ip = (int)v;
-  int fp = (int)((v - (float)ip) * 1000.0f + 0.5f);
-  if (fp >= 1000) { ip += 1; fp -= 1000; }
-  printf("%d.%03d", ip, fp);
-}
-
-void App_LogTrace(float z, float pos_fil, float sp, float u, float angle)
-{
-  printf("z="); print_f(z);
-  printf(" fil="); print_f(pos_fil);
-  printf(" sp="); print_f(sp);
-  printf(" u="); print_f(u);
-  printf(" ang="); print_f(angle);
-  printf("\r\n");
-}
-
 /* ====================== Inicializacion ===================== */
 
 void App_Init(void)
 {
-#if APP_RUN_SELFTESTS
-  /* Self-tests on-target antes de arrancar el lazo (no se compila con flag 0). */
-  SelfTest_Run();
-#endif
-
   /* --- Semaforos binarios --- */
   SemTimer  = xSemaphoreCreateBinary();
   SemSensor = xSemaphoreCreateBinary();
