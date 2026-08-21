@@ -14,8 +14,7 @@
  * Stack en WORDS (no bytes). Prioridad mayor = mas urgente.                  *
  * Sensor 5, Kalman 4, Motor 4, PID 3, Pot 1.                                 *
  * Stacks dimensionados por rol; verificar margen real con                    *
- * uxTaskGetStackHighWaterMark (INCLUDE ya activo) y ajustar. La PID lleva mas *
- * porque hace printf (App_LogTrace) cuando el log esta activo.               */
+ * uxTaskGetStackHighWaterMark (INCLUDE ya activo) y ajustar.                  */
 #define SENSOR_TASK_STACK       256u
 #define KALMAN_TASK_STACK       256u
 #define PID_TASK_STACK          384u
@@ -36,11 +35,6 @@
 /* --- Potenciometro (setpoint) --------------------------------------------- */
 #define POT_RANGE_CM            50.0f   /* largo util de la barra (mapea el pote)*/
 #define POT_PERIOD_MS           200u    /* lectura del setpoint cada 200 ms    */
-
-/* --- Flags de test / diagnostico (opt-in; produccion en 0 salvo LOG) ------ */
-#define APP_RUN_SELFTESTS       0       /* 1 = corre self-tests al arrancar    */
-#define APP_USE_SYNTHETIC_SENSOR 0      /* 1 = sensor sintetico (valida cadena sin HW) */
-#define APP_LOG_ENABLED         0       /* 1 = traza del lazo por UART (subir para tuning) */
 
 /* --- Filtro de Kalman ----------------------------------------------------- */
 #define KALMAN_DT               0.1f    /* 100 ms (tick del sensor)            */
