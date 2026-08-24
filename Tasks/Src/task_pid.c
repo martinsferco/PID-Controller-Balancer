@@ -26,16 +26,17 @@ void PidTask(void *argument)
   PID_Init(&pid, PID_KP, PID_KI, PID_KD, PID_DT);
   PID_SetLimits(&pid, PID_OUT_MIN, PID_OUT_MAX);
 
-  /* Setpoint por defecto = centro del rango, hasta que el pote publique el suyo. */
-  float setpoint = (SENSOR_MIN_CM + SENSOR_MAX_CM) * 0.5f;
+  /* Setpoint por defecto hasta que PotTask publique el suyo (mitad de la barra). */
+  float setpoint = SETPOINT_FIXED_CM;
   float pos_fil  = setpoint;
 
   for (;;)
   {
     QueueSetMemberHandle_t who = xQueueSelectFromSet(QueueSetPid, portMAX_DELAY);
 
-    /* Se lee con timeout 0 y se actua solo si vino dato real: con xQueueOverwrite
-     * sobre miembros de un set puede quedar algun aviso "stale" en el set. */
+    /* Se lee con timeout 0: con xQueueOverwrite sobre miembros de un set puede
+     * quedar algun aviso "stale". Un setpoint nuevo solo refresca la variable;
+     * el PID se computa una unica vez por tick de posicion (respeta el dt fijo). */
     if (who == QueueObjetivo)
     {
       (void)xQueueReceive(QueueObjetivo, &setpoint, 0);
@@ -45,8 +46,12 @@ void PidTask(void *argument)
       if (xQueueReceive(QueuePosFil, &pos_fil, 0) == pdTRUE)
       {
         float u     = PID_Compute(&pid, setpoint, pos_fil);
-        float angle = SERVO_CENTER_DEG + u;          /* u en grados relativos al centro */
+        float angle = SERVO_CENTER_DEG + (SERVO_DIR * u);
         xQueueOverwrite(QueueAngulo, &angle);
+
+#if (APP_LOG_LOOP == 1)
+        App_LogTrace(g_dbg_raw, pos_fil, setpoint, u, angle);
+#endif
       }
     }
   }

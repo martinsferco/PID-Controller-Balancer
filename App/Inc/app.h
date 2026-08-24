@@ -14,6 +14,7 @@
 extern "C" {
 #endif
 
+#include "app_config.h"
 #include "FreeRTOS.h"
 #include "task.h"
 #include "semphr.h"
@@ -25,7 +26,7 @@ extern "C" {
 /* --- Instancias de drivers (definidas en app.c) --------------------------- */
 extern HC_SR04_HandleTypeDef g_sensor;   /* sensor de distancia            */
 extern Servo_HandleTypeDef   g_servo;    /* servo del brazo                */
-extern Pot_HandleTypeDef     g_pot;      /* potenciometro (setpoint)       */
+extern Potentiometer_HandleTypeDef g_potentiometer;  /* potenciometro (setpoint) */
 
 /* --- Semaforos binarios --------------------------------------------------- */
 extern SemaphoreHandle_t SemTimer;   /* lo da la ISR de TIM4 (cada 100 ms) */
@@ -51,6 +52,23 @@ void App_OnSensorComplete_FromISR(HC_SR04_HandleTypeDef *h);
 
 /** @brief Hook del TIM4 (ISR cada 100 ms): da SemTimer (tick del sensor). */
 void App_OnTimerTick_FromISR(void);
+
+/* --- Traza de debug (solo con APP_LOG_ENABLED = 1) ------------------------ */
+#if (APP_LOG_ENABLED == 1)
+
+/** @brief Ultima distancia cruda medida, para que la traza del PID la muestre. */
+extern volatile float g_dbg_raw;
+
+/** @brief Una linea de traza del lazo: z / fil / sp / u / ang. */
+void App_LogTrace(float z, float pos_fil, float sp, float u, float angle);
+
+/** @brief Mensaje suelto (banner, estados del sensor, etc.). */
+void App_LogMsg(const char *msg);
+
+/** @brief Mensaje + un float (ej. "SENSOR INVALID raw=" 45.230). */
+void App_LogMsgF(const char *msg, float v);
+
+#endif /* APP_LOG_ENABLED */
 
 #ifdef __cplusplus
 }
