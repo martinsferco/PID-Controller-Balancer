@@ -1,8 +1,9 @@
 /**
   ******************************************************************************
   * @file    hc_sr04.h
-  * @brief   Driver HAL para el sensor ultrasonico HC-SR04 (medicion por Input
-  *          Capture, basado en interrupciones, sin busy-waiting).
+  * @brief   Driver HAL para el sensor ultrasonico HC-SR04. La medicion del ECHO
+  *          es por Input Capture basada en interrupciones (sin busy-waiting); el
+  *          unico busy-wait es el pulso de TRIG de 10 us.
   *
   *          Caracteristicas:
   *            - Multi-instancia (varios sensores con distinto TRIG/canal de TIM).
@@ -13,10 +14,12 @@
   *              funcion) que se invoca al completar una medicion; desde ahi vos
   *              podes dar un semaforo con xSemaphoreGiveFromISR(), etc.
   *
-  *          Requisitos de CubeMX (ver Manual_CubeMX.md):
-  *            - TIM en Input Capture direct mode, Prescaler=83 (1 us/tick).
-  *            - Preferentemente un timer de 32 bits (TIM2/TIM5) para no preocuparse
-  *              por el overflow. Igual el driver maneja el wrap-around.
+  *          Requisitos de CubeMX (ver Manual_CubeMX_HCSR04.md):
+  *            - TIM en Input Capture direct mode, con el Prescaler que de 1 us/tick
+  *              (PSC = MHz del timer - 1; en este proyecto 16 MHz -> PSC=15).
+  *            - Preferentemente un timer de 32 bits (TIM2/TIM5): la medicion y el
+  *              delay del TRIG usan resta unsigned del contador, que maneja el
+  *              wrap-around solo en 32 bits (o en 16 bits con ARR=0xFFFF).
   *            - Pin TRIG como GPIO_Output push-pull.
   ******************************************************************************
   */
@@ -45,46 +48,41 @@ typedef enum {
     HC_SR04_STATE_IDLE = 0,
     HC_SR04_STATE_WAIT_RISE,
     HC_SR04_STATE_WAIT_FALL
-} HC_SR04_FsmState;
+} HC_SR04_MeasureState;
 
 typedef struct HC_SR04_Handle HC_SR04_HandleTypeDef;
 
 /* Hook opcional invocado (en contexto de ISR) al completar una medicion.
  * Usalo para dar un semaforo a tu TaskSensor: ...GiveFromISR(). */
-typedef void (*HC_SR04_CompleteCb)(HC_SR04_HandleTypeDef *h);
+typedef void (*HC_SR04_CompleteCallback)(HC_SR04_HandleTypeDef *h);
 
 struct HC_SR04_Handle {
-    /* --- Configuracion (seteada en Init) --- */
     TIM_HandleTypeDef *htim;       /* timer en modo Input Capture            */
     uint32_t           channel;    /* TIM_CHANNEL_1..4                       */
     uint32_t           active_ch;  /* HAL_TIM_ACTIVE_CHANNEL_x (uso interno) */
     GPIO_TypeDef      *trig_port;  /* puerto del pin TRIG                    */
     uint16_t           trig_pin;   /* pin TRIG                               */
 
-    /* --- Parametros ajustables (tienen default en Init) --- */
     float    min_cm;               /* lectura minima valida (def 2.0)        */
     float    max_cm;               /* lectura maxima valida (def 400.0)      */
     uint32_t timeout_ms;           /* timeout de medicion (def 60 ms)        */
 
-    /* --- Estado en runtime --- */
-    volatile HC_SR04_FsmState state;
+    volatile HC_SR04_MeasureState state;
     volatile uint32_t t_rise;      /* captura del flanco de subida [us]      */
     volatile uint32_t t_fall;      /* captura del flanco de bajada [us]      */
-    volatile float    distance_cm; /* ultima distancia calculada             */
-    volatile uint8_t  data_ready;  /* hay dato nuevo sin leer (0/1)          */
+    volatile uint8_t  data_ready;  /* hay dato nuevo sin leer                */
     uint32_t          trigger_tick;/* HAL_GetTick() al disparar (timeout)    */
 
-    /* --- Hook opcional --- */
-    HC_SR04_CompleteCb on_complete;
+    HC_SR04_CompleteCallback on_complete;
 };
 
 /**
-  * @brief  Inicializa una instancia del sensor y la registra para el dispatch.
+  * @brief  Inicializa una instancia del sensor y la registra para su uso.
   * @param  h         puntero al handle (lo provee el usuario, sin malloc)
   * @param  htim      timer ya inicializado por CubeMX en Input Capture
-  * @param  channel   TIM_CHANNEL_1..4 usado para el ECHO
-  * @param  trig_port puerto del pin TRIG (ej. TRIG_GPIO_Port)
-  * @param  trig_pin  pin TRIG (ej. TRIG_Pin)
+  * @param  channel   timer channel usado para el ECHO
+  * @param  trig_port puerto del pin TRIG
+  * @param  trig_pin  pin TRIG
   * @retval HC_SR04_OK / HC_SR04_ERROR
   */
 HC_SR04_Status HC_SR04_Init(HC_SR04_HandleTypeDef *h,
@@ -97,10 +95,10 @@ HC_SR04_Status HC_SR04_Init(HC_SR04_HandleTypeDef *h,
   * @brief  Setea el hook que se llama al completar una medicion (contexto ISR).
   *         Pasar NULL para deshabilitarlo.
   */
-void HC_SR04_SetCompleteCallback(HC_SR04_HandleTypeDef *h, HC_SR04_CompleteCb cb);
+void HC_SR04_SetCompleteCallback(HC_SR04_HandleTypeDef *h, HC_SR04_CompleteCallback cb);
 
 /**
-  * @brief  Ajusta el rango valido de medicion (cm). Por defecto 2..400.
+  * @brief  Ajusta el rango valido de medicion en cm.
   */
 void HC_SR04_SetRange(HC_SR04_HandleTypeDef *h, float min_cm, float max_cm);
 
@@ -113,7 +111,9 @@ HC_SR04_Status HC_SR04_Trigger(HC_SR04_HandleTypeDef *h);
 
 /**
   * @brief  Obtiene la ultima distancia. No bloquea.
-  * @param  out_cm  (salida) distancia en cm si retorna HC_SR04_OK
+  * @param  out_cm  (salida) distancia en cm. Se escribe con HC_SR04_OK y
+  *                 tambien con HC_SR04_INVALID (valor crudo rechazado, util
+  *                 para diagnostico); no se toca con BUSY/TIMEOUT/ERROR.
   * @retval HC_SR04_OK     hay dato nuevo valido (queda consumido)
   *         HC_SR04_BUSY   medicion en curso, todavia sin dato
   *         HC_SR04_TIMEOUT venció el timeout sin echo (resetea a IDLE)
@@ -122,20 +122,12 @@ HC_SR04_Status HC_SR04_Trigger(HC_SR04_HandleTypeDef *h);
 HC_SR04_Status HC_SR04_GetDistance(HC_SR04_HandleTypeDef *h, float *out_cm);
 
 /**
-  * @brief  Manejador de la captura para ESTA instancia. Llamalo desde
-  *         HAL_TIM_IC_CaptureCallback si manejas el dispatch vos mismo.
-  */
-void HC_SR04_TIM_IC_Callback(HC_SR04_HandleTypeDef *h);
-
-/**
-  * @brief  Dispatcher global: recorre las instancias registradas y atiende la
-  *         que corresponde a (htim, canal activo). Llamalo asi desde tu codigo:
-  *
-  *             void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim) {
-  *                 HC_SR04_HandleInterrupt(htim);
-  *             }
+  * @brief  Dispatcher global de la captura: recorre las instancias registradas y
+  *         atiende la que corresponde a (htim, canal activo). Llamalo desde
+  *         HAL_TIM_IC_CaptureCallback.
   */
 void HC_SR04_HandleInterrupt(TIM_HandleTypeDef *htim);
+
 
 #ifdef __cplusplus
 }

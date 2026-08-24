@@ -26,38 +26,39 @@ extern "C" {
 #include <stdint.h>
 
 typedef enum {
-    POT_OK = 0,
-    POT_TIMEOUT,
-    POT_ERROR
-} Pot_Status;
+    POTENTIOMETER_OK = 0,
+    POTENTIOMETER_TIMEOUT,
+    POTENTIOMETER_ERROR
+} Potentiometer_Status;
 
 typedef struct {
     ADC_HandleTypeDef *hadc;        /* ADC ya inicializado por CubeMX        */
     uint32_t           full_scale;  /* valor maximo del ADC (def 4095 = 12b) */
-    float              range_cm;    /* largo util de la barra en cm          */
+    float              min_cm;      /* cm en el extremo bajo del pote (def 0) */
+    float              max_cm;      /* cm en el extremo alto del pote (def 100)*/
     uint32_t           timeout_ms;  /* timeout del poll (def 10 ms)          */
-} Pot_HandleTypeDef;
+} Potentiometer_HandleTypeDef;
 
 /**
-  * @brief  Inicializa el potenciometro.
-  * @param  hadc      ADC configurado en CubeMX (ej. &hadc1)
-  * @param  range_cm  largo fisico que representa el recorrido del pote (cm)
+  * @brief  Inicializa el potenciometro. El rango de salida arranca en un default
+  *         (0..100 cm); ajustalo con Potentiometer_SetRange.
+  * @param  hadc  ADC configurado en CubeMX (ej. &hadc1)
   */
-Pot_Status Pot_Init(Pot_HandleTypeDef *p,
-                    ADC_HandleTypeDef *hadc,
-                    float range_cm);
+Potentiometer_Status Potentiometer_Init(Potentiometer_HandleTypeDef *p,
+                                        ADC_HandleTypeDef *hadc);
 
 /**
-  * @brief  Lee el valor crudo del ADC (0..full_scale) por polling.
-  * @param  out_raw (salida) valor convertido
+  * @brief  Define el rango de cm que devuelve ReadPosition: el extremo bajo del
+  *         pote mapea a min_cm y el alto a max_cm. Requiere min_cm < max_cm.
   */
-Pot_Status Pot_ReadRaw(Pot_HandleTypeDef *p, uint32_t *out_raw);
+Potentiometer_Status Potentiometer_SetRange(Potentiometer_HandleTypeDef *p,
+                                            float min_cm, float max_cm);
 
 /**
-  * @brief  Lee y mapea la posicion a cm en [0, range_cm].
+  * @brief  Lee y mapea la posicion a cm en [min_cm, max_cm].
   * @param  out_cm (salida) posicion en centimetros
   */
-Pot_Status Pot_ReadPosition_cm(Pot_HandleTypeDef *p, float *out_cm);
+Potentiometer_Status Potentiometer_ReadPosition_cm(Potentiometer_HandleTypeDef *p, float *out_cm);
 
 #ifdef __cplusplus
 }
