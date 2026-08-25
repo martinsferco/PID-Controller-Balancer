@@ -8,13 +8,33 @@ Escala **absoluta** del eje, en grados:
 
 | Angulo | Horn | Pulso |
 |-------:|------|------:|
-|   0    | arriba de todo      | 500 us |
+|   0    | un extremo del recorrido | 500 us |
 |  10    | **piso permitido**  | 611 us |
 |  45    | -                   | 1000 us |
 |  90    | **HORIZONTAL** (barra nivelada) | 1500 us |
 | 135    | -                   | 2000 us |
 | 170    | **techo permitido** | 2389 us |
-| 180    | abajo de todo       | 2500 us |
+| 180    | el otro extremo     | 2500 us |
+
+**Que extremo es "arriba" NO lo define esta tabla** (y una version anterior de este
+documento lo afirmaba al reves, lo que costo una sesion de confusion). Verificado en
+hardware el 2026-08-23 en este montaje: **al aumentar el angulo el horn va hacia ARRIBA**,
+o sea 0 = abajo de todo y 180 = arriba de todo. Pero eso no es un hecho del MG90S: depende
+de en que diente quedo calzado el horn y de que lado se lo mira, y cambia si algun dia se
+lo desmonta.
+
+Por eso **el codigo no usa esa etiqueta en ningun lado**, y no hay que "corregir" nada
+cuando no coincide con lo que uno esperaba:
+
+- La recta `deg -> us` es monotona: angulo mayor = pulso mas ancho, siempre. Es lo unico
+  que promete el driver, y se verifica leyendo `Servo_GetPulseUs()`.
+- La guarda `10..170` es **simetrica** alrededor de 90: da igual cual punta es cual.
+- `SERVO_LEVEL_DEG = 90` se midio **empiricamente** con la barra puesta (modo `HOLD`), no
+  se dedujo de la convencion.
+- El unico lugar donde entra el sentido fisico es **`SERVO_DIR`** en `app_config.h`, y
+  tambien se determina empiricamente: absorbe de una sola vez el sentido del horn y la
+  geometria del acople. Si el lazo corrige para el lado que no debe, se cambia ese signo y
+  no se toca nada mas.
 
 Recta nominal del servo de hobby: `T[us] = 500 + (2000/180) * grados`, o sea 11.1111 us por
 grado. Los 500 y 2500 us son los **extremos fisicos** del MG90S; el recorrido permitido se

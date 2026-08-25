@@ -84,12 +84,14 @@ static void print_f(float v)
   printf("%d.%03d", ip, fp);
 }
 
-void App_LogTrace(float z, float pos_fil, float sp, float u, float angle)
+void App_LogTrace(float z, float pos_fil, float vel, float sp, float u, float integ, float angle)
 {
   printf("z=");    print_f(z);
   printf(" fil="); print_f(pos_fil);
+  printf(" vel="); print_f(vel);
   printf(" sp=");  print_f(sp);
   printf(" u=");   print_f(u);
+  printf(" i=");   print_f(integ);
   printf(" ang="); print_f(angle);
   printf("\r\n");
 }
@@ -119,7 +121,7 @@ void App_Init(void)
   App_LogMsgF("barra_cm=",    BEAM_LENGTH_CM);
   App_LogMsgF("setpoint_cm=", SETPOINT_FIXED_CM);
   App_LogMsgF("servo_dir=",   SERVO_DIR);
-  App_LogMsg("formato: z=cruda fil=kalman sp=objetivo u=pid ang=servo");
+  App_LogMsg("formato: z=cruda fil=kalman vel=kalman sp=objetivo u=pid i=integ ang=servo");
 #endif
 
   /* --- Semaforos binarios --- */
@@ -127,16 +129,25 @@ void App_Init(void)
   SemSensor = xSemaphoreCreateBinary();
   if (SemTimer == NULL || SemSensor == NULL) { Error_Handler(); }
 
-  /* --- Colas float profundidad 1 --- */
+  /* --- Colas profundidad 1 --- */
+  /* QueuePosFil lleva PosFil_t (pos+vel), no un float: el termino D del PID
+   * necesita la velocidad del mismo update que produjo la posicion. */
   QueuePos      = xQueueCreate(1, sizeof(float));
-  QueuePosFil   = xQueueCreate(1, sizeof(float));
+  QueuePosFil   = xQueueCreate(1, sizeof(PosFil_t));
   QueueObjetivo = xQueueCreate(1, sizeof(float));
   QueueAngulo   = xQueueCreate(1, sizeof(float));
   if (QueuePos == NULL || QueuePosFil == NULL ||
       QueueObjetivo == NULL || QueueAngulo == NULL) { Error_Handler(); }
 
   /* --- Queue set del PID (QueuePosFil + QueueObjetivo) --- */
-  QueueSetPid = xQueueCreateSet(2);   /* 1 + 1 (profundidades) */
+  /* Longitud 4, no 2. La regla de FreeRTOS (suma de las profundidades = 1+1)
+   * vale para colas normales, pero aca se publica con xQueueOverwrite: cada
+   * escritura genera un aviso al set AUNQUE la cola ya tuviera un dato sin
+   * leer, asi que los avisos pendientes pueden superar la cantidad de datos.
+   * Si el contenedor se llena, prvNotifyQueueSetContainer pega en un
+   * configASSERT, que en este proyecto es taskDISABLE_INTERRUPTS() + for(;;):
+   * cuelgue mudo, sin traza ni LED. Dos slots de mas cuestan 16 bytes. */
+  QueueSetPid = xQueueCreateSet(4);
   if (QueueSetPid == NULL) { Error_Handler(); }
   if (xQueueAddToSet(QueuePosFil,  QueueSetPid) != pdPASS) { Error_Handler(); }
   if (xQueueAddToSet(QueueObjetivo, QueueSetPid) != pdPASS) { Error_Handler(); }

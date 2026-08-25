@@ -59,12 +59,26 @@ static void servo_dump_pwm_state(void)
 static void servo_goto(float deg, uint32_t hold_ms)
 {
   Servo_SetAngle(&g_servo, deg);
-#if (APP_LOG_ENABLED == 1)
-  App_LogMsgF("ang=", deg);
-  App_LogMsgF("  -> us=", servo_pulse_us());
-#endif
   HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
   vTaskDelay(pdMS_TO_TICKS(hold_ms));
+
+#if (APP_LOG_ENABLED == 1)
+  /* La traza sale DESPUES de la espera, y a proposito: asi `z_cm` es la posicion
+   * de REPOSO de la pelota a este angulo, no la de transito. Esa tabla
+   * angulo -> reposo es el dato de calibracion del montaje, y mide de una sola
+   * vez las tres cosas que no se pueden deducir:
+   *   1) la HORIZONTAL real: el angulo donde la pelota no se va para ningun lado
+   *      esté donde esté (si no coincide con SERVO_LEVEL_DEG, se corrige ahi).
+   *   2) el UMBRAL DE ARRANQUE a cada lado: cuanto hay que pasarse de la
+   *      horizontal para que se despegue. No tiene por que ser simetrico.
+   *   3) si la barra es PLANA: si el reposo depende de donde estaba la pelota,
+   *      hay hondonadas locales y el umbral es distinto en cada punto -- eso no
+   *      lo arregla ninguna ganancia.
+   * SensorTask corre en todos los modos, asi que g_dbg_raw esta siempre fresco. */
+  App_LogMsgF("ang=", deg);
+  App_LogMsgF("  us=", servo_pulse_us());
+  App_LogMsgF("  z_cm=", g_dbg_raw);
+#endif
 }
 #endif
 
@@ -144,7 +158,24 @@ static void motor_mode_step(void)
 static void motor_mode_hold(void)
 {
   servo_goto(APP_HOLD_DEG, 1u);
-  for (;;) { vTaskDelay(pdMS_TO_TICKS(1000)); }
+
+  /* BANCO DEL SENSOR. La barra queda clavada y no se mueve NUNCA mas, asi que
+   * todo cambio de z_cm es la pelota -- o lo que el sensor este viendo en su
+   * lugar. Sirve para la pregunta que ninguna otra traza contesta: el sensor,
+   * ve la pelota? Procedimiento:
+   *   1) Movela despacio a mano de una punta a la otra: z_cm tiene que
+   *      seguirla en todo el recorrido, sin saltos ni zonas donde se congela.
+   *   2) SACALA de la barra: z_cm TIENE que cambiar. Si sigue marcando lo
+   *      mismo, el sensor nunca la estuvo viendo y esta enganchado a algo fijo
+   *      (lo mas probable: la superficie de la barra, que el cono de ~15 grados
+   *      roza y devuelve un eco mucho mas fuerte que el de la pelota). */
+  for (;;)
+  {
+    vTaskDelay(pdMS_TO_TICKS(500));
+#if (APP_LOG_ENABLED == 1)
+    App_LogMsgF("z_cm=", g_dbg_raw);
+#endif
+  }
 }
 #endif
 
@@ -199,8 +230,15 @@ void MotorTask(void *argument)
 #elif (APP_MOTOR_MODE == APP_MOTOR_MODE_HOLD)
 #if (APP_LOG_ENABLED == 1)
   App_LogMsg("MODO HOLD: angulo fijo, el lazo NO arranca");
-  App_LogMsg("  medir la HORIZONTAL: si la barra no queda nivelada, corregir");
-  App_LogMsg("  SERVO_LEVEL_DEG en app_config.h (bajar = sube, subir = baja)");
+  App_LogMsg("  MONTAJE DEL HORN: aflojar el tornillo central, LEVANTAR el horn");
+  App_LogMsg("  del eje estriado y volver a calzarlo con la barra nivelada.");
+  App_LogMsg("  NO forzarlo a mano contra el servo alimentado: se comen los");
+  App_LogMsg("  dientes del reductor.");
+  App_LogMsg("  El estriado tiene 21 dientes = 17.1 grados por diente, asi que");
+  App_LogMsg("  a mano se llega a +-8.6 grados; el resto va por software.");
+  App_LogMsg("  Si queda desnivelada, ajustar SERVO_LEVEL_DEG en app_config.h.");
+  App_LogMsg("  Para saber hacia donde: probar 95, y si empeora ir a 85. No se");
+  App_LogMsg("  deduce del numero -- depende de como quedo calzado el horn.");
   App_LogMsgF("  1 grado = us: ", SERVO_US_PER_DEG);
   App_LogMsgF("  angulo pedido ahora = ", APP_HOLD_DEG);
 #endif
@@ -211,11 +249,16 @@ void MotorTask(void *argument)
   uint32_t n = 0u;
 #endif
 
+  /* Estado del failsafe. Se usa para actuar SOLO en el flanco: nivelar una vez
+   * al perder la pelota, y no reescribir el mismo angulo cada timeout. */
+  uint8_t lost = 0u;
+
   for (;;)
   {
     float angle = 0.0f;
-    if (xQueueReceive(QueueAngulo, &angle, portMAX_DELAY) == pdTRUE)
+    if (xQueueReceive(QueueAngulo, &angle, pdMS_TO_TICKS(APP_MOTOR_TIMEOUT_MS)) == pdTRUE)
     {
+      lost = 0u;
       Servo_SetAngle(&g_servo, angle);
       HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);   /* heartbeat del lazo */
 
@@ -226,6 +269,26 @@ void MotorTask(void *argument)
         App_LogMsgF("MOTOR aplicado ang=", angle);
         App_LogMsgF("  -> us=", servo_pulse_us());
       }
+#endif
+    }
+    else if (!lost)
+    {
+      /* FAILSAFE: pasaron APP_MOTOR_TIMEOUT_MS sin angulo nuevo, o sea que el
+       * sensor dejo de ver la pelota. Antes esta task esperaba con
+       * portMAX_DELAY: se quedaba bloqueada para siempre y el servo clavado en
+       * la ultima inclinacion, que es exactamente la peor posicion para que la
+       * pelota vuelva. Nivelar es lo unico razonable sin medicion.
+       *
+       * El integrador de PidTask NO se descarga aca, y no hace falta: PidTask
+       * solo integra cuando LLEGA una posicion, asi que mientras el sensor no
+       * entrega, el integrador queda congelado en vez de acumular. Lo que
+       * conserva es la carga que tenia al perder la pelota -- unos pocos grados,
+       * acotados por PID_I_BAND -- y la descarga al cruzar el setpoint se la
+       * come en el primer cruce. */
+      lost = 1u;
+      Servo_SetAngle(&g_servo, SERVO_LEVEL_DEG);
+#if (APP_LOG_ENABLED == 1)
+      App_LogMsg("MOTOR: sin angulo nuevo -> barra NIVELADA (failsafe)");
 #endif
     }
   }

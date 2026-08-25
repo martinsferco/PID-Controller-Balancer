@@ -25,10 +25,14 @@ void PidTask(void *argument)
   PID_t pid;
   PID_Init(&pid, PID_KP, PID_KI, PID_KD, PID_DT);
   PID_SetLimits(&pid, PID_OUT_MIN, PID_OUT_MAX);
+  PID_SetIntegralBand(&pid, PID_I_BAND);
 
   /* Setpoint por defecto hasta que PotTask publique el suyo (mitad de la barra). */
   float setpoint = SETPOINT_FIXED_CM;
-  float pos_fil  = setpoint;
+
+  /* Estado estimado: arranca en el setpoint y quieto, para que la primera accion
+   * de control no sea un salto si todavia no llego nada del Kalman. */
+  PosFil_t est = { SETPOINT_FIXED_CM, 0.0f };
 
   for (;;)
   {
@@ -43,14 +47,18 @@ void PidTask(void *argument)
     }
     else if (who == QueuePosFil)
     {
-      if (xQueueReceive(QueuePosFil, &pos_fil, 0) == pdTRUE)
+      if (xQueueReceive(QueuePosFil, &est, 0) == pdTRUE)
       {
-        float u     = PID_Compute(&pid, setpoint, pos_fil);
+        /* PID_ComputeRate y no PID_Compute: la velocidad viene del Kalman, que
+         * la estima con el modelo de ruido (Q, R) en vez de restar dos muestras
+         * cuantizadas. Misma cantidad, mucho menos ruido, y ninguna fase extra
+         * porque sale del mismo filtro que ya suaviza la posicion. */
+        float u     = PID_ComputeRate(&pid, setpoint, est.pos, est.vel);
         float angle = SERVO_CENTER_DEG + (SERVO_DIR * u);
         xQueueOverwrite(QueueAngulo, &angle);
 
 #if (APP_LOG_LOOP == 1)
-        App_LogTrace(g_dbg_raw, pos_fil, setpoint, u, angle);
+        App_LogTrace(g_dbg_raw, est.pos, est.vel, setpoint, u, pid.integ, angle);
 #endif
       }
     }
