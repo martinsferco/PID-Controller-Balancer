@@ -1,8 +1,8 @@
 /**
   ******************************************************************************
   * @file    app.c
-  * @brief   Wiring de la aplicacion ball-and-beam: instancias de drivers,
-  *          IPC (4 colas + queue set + 2 semaforos), hooks de ISR, arranque de
+  * @brief   Wiring de la aplicacion ball-and-beam: instancias de drivers, IPC
+  *          (4 colas + queue set + 2 semaforos), hooks de ISR, arranque de los
   *          perifericos de tiempo real y creacion de las 5 tasks.
   ******************************************************************************
   */
@@ -28,8 +28,8 @@
 #endif
 
 /* --- Instancias de drivers ------------------------------------------------ */
-HC_SR04_HandleTypeDef g_sensor;
-Servo_HandleTypeDef   g_servo;
+HC_SR04_HandleTypeDef       g_sensor;
+Servo_HandleTypeDef         g_servo;
 Potentiometer_HandleTypeDef g_potentiometer;
 
 /* --- Semaforos ------------------------------------------------------------ */
@@ -43,9 +43,9 @@ QueueHandle_t    QueueObjetivo;
 QueueHandle_t    QueueAngulo;
 QueueSetHandle_t QueueSetPid;
 
-/* ====================== Hooks de ISR ======================= */
+/* ============================ Hooks de ISR ================================ */
 
-/* ISR de TIM2 (Input Capture del HC-SR04): medicion completa -> despierta SensorTask. */
+/* ISR de TIM2 (Input Capture del HC-SR04): medicion completa -> SensorTask. */
 void App_OnSensorComplete_FromISR(HC_SR04_HandleTypeDef *h)
 {
   (void)h;
@@ -54,7 +54,7 @@ void App_OnSensorComplete_FromISR(HC_SR04_HandleTypeDef *h)
   portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }
 
-/* ISR de TIM4 (cada 100 ms): tick hard-real-time -> dispara el ciclo del sensor. */
+/* ISR de TIM4 (cada 100 ms): tick hard real time del ciclo del sensor. */
 void App_OnTimerTick_FromISR(void)
 {
   BaseType_t xHigherPriorityTaskWoken = pdFALSE;
@@ -62,10 +62,10 @@ void App_OnTimerTick_FromISR(void)
   portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }
 
-/* ====================== Traza de debug ===================== */
+/* ============================ Traza por UART ============================== */
 #if (APP_LOG_ENABLED == 1)
 
-volatile float g_dbg_raw = 0.0f;
+volatile float g_sensor_raw_cm = 0.0f;
 
 /* Retarget de printf hacia USART2 (COM virtual del ST-Link). */
 int __io_putchar(int ch)
@@ -84,7 +84,8 @@ static void print_f(float v)
   printf("%d.%03d", ip, fp);
 }
 
-void App_LogTrace(float z, float pos_fil, float vel, float sp, float u, float integ, float angle)
+void App_LogTrace(float z, float pos_fil, float vel, float sp, float u,
+                  float integ, float angle)
 {
   printf("z=");    print_f(z);
   printf(" fil="); print_f(pos_fil);
@@ -110,18 +111,13 @@ void App_LogMsgF(const char *msg, float v)
 
 #endif /* APP_LOG_ENABLED */
 
-/* ====================== Inicializacion ===================== */
+/* ============================ Inicializacion ============================== */
 
 void App_Init(void)
 {
 #if (APP_LOG_ENABLED == 1)
-  /* Banner: si esto NO aparece en la terminal, el problema es el UART / la
-   * terminal / el flasheo, no el lazo de control. */
-  App_LogMsg("\r\n=== BALL & BEAM - DEBUG ===");
-  App_LogMsgF("barra_cm=",    BEAM_LENGTH_CM);
-  App_LogMsgF("setpoint_cm=", SETPOINT_FIXED_CM);
-  App_LogMsgF("servo_dir=",   SERVO_DIR);
-  App_LogMsg("formato: z=cruda fil=kalman vel=kalman sp=objetivo u=pid i=integ ang=servo");
+  App_LogMsg("\r\n=== BALL & BEAM ===");
+  App_LogMsg("formato: z=cruda fil=kalman vel=kalman sp=objetivo u=pid i=integral ang=servo");
 #endif
 
   /* --- Semaforos binarios --- */
@@ -129,9 +125,7 @@ void App_Init(void)
   SemSensor = xSemaphoreCreateBinary();
   if (SemTimer == NULL || SemSensor == NULL) { Error_Handler(); }
 
-  /* --- Colas profundidad 1 --- */
-  /* QueuePosFil lleva PosFil_t (pos+vel), no un float: el termino D del PID
-   * necesita la velocidad del mismo update que produjo la posicion. */
+  /* --- Colas de profundidad 1 --- */
   QueuePos      = xQueueCreate(1, sizeof(float));
   QueuePosFil   = xQueueCreate(1, sizeof(PosFil_t));
   QueueObjetivo = xQueueCreate(1, sizeof(float));
@@ -139,27 +133,29 @@ void App_Init(void)
   if (QueuePos == NULL || QueuePosFil == NULL ||
       QueueObjetivo == NULL || QueueAngulo == NULL) { Error_Handler(); }
 
-  /* --- Queue set del PID (QueuePosFil + QueueObjetivo) --- */
-  /* Longitud 4, no 2. La regla de FreeRTOS (suma de las profundidades = 1+1)
+  /* --- Queue set del PID (QueuePosFil + QueueObjetivo) ---------------------
+   * Longitud 4, no 2. La regla de FreeRTOS (suma de las profundidades = 1+1)
    * vale para colas normales, pero aca se publica con xQueueOverwrite: cada
    * escritura genera un aviso al set AUNQUE la cola ya tuviera un dato sin
-   * leer, asi que los avisos pendientes pueden superar la cantidad de datos.
-   * Si el contenedor se llena, prvNotifyQueueSetContainer pega en un
-   * configASSERT, que en este proyecto es taskDISABLE_INTERRUPTS() + for(;;):
-   * cuelgue mudo, sin traza ni LED. Dos slots de mas cuestan 16 bytes. */
+   * leer, asi que los avisos pendientes pueden superar la cantidad de datos. Si
+   * el contenedor se llena, FreeRTOS pega en un configASSERT, que en este
+   * proyecto es taskDISABLE_INTERRUPTS() + for(;;): un cuelgue mudo. Dos slots
+   * de mas cuestan 16 bytes. */
   QueueSetPid = xQueueCreateSet(4);
   if (QueueSetPid == NULL) { Error_Handler(); }
-  if (xQueueAddToSet(QueuePosFil,  QueueSetPid) != pdPASS) { Error_Handler(); }
+  if (xQueueAddToSet(QueuePosFil,   QueueSetPid) != pdPASS) { Error_Handler(); }
   if (xQueueAddToSet(QueueObjetivo, QueueSetPid) != pdPASS) { Error_Handler(); }
 
-  /* --- Potenciometro (solo init de struct; el ADC ya lo configuro CubeMX) --- */
+  /* --- Potenciometro (el ADC ya lo configuro CubeMX) --- */
   if (Potentiometer_Init(&g_potentiometer, &hadc1) != POTENTIOMETER_OK) { Error_Handler(); }
-  if (Potentiometer_SetRange(&g_potentiometer, POTENTIOMETER_MIN_CM, POTENTIOMETER_MAX_CM) != POTENTIOMETER_OK) { Error_Handler(); }
+  if (Potentiometer_SetRange(&g_potentiometer,
+                             POTENTIOMETER_MIN_CM,
+                             POTENTIOMETER_MAX_CM) != POTENTIOMETER_OK) { Error_Handler(); }
 
-  /* --- Arrancar el tick de 100 ms (TIM4 en modo base con interrupcion) --- */
+  /* --- Tick de 100 ms (TIM4 en modo base con interrupcion) --- */
   if (HAL_TIM_Base_Start_IT(&htim4) != HAL_OK) { Error_Handler(); }
 
-  /* --- Tasks (una por archivo) --- */
+  /* --- Tasks (una por archivo, prioridades en app_config.h) --- */
   if (xTaskCreate(SensorTask, "Sensor", SENSOR_TASK_STACK, NULL, SENSOR_TASK_PRIO, NULL) != pdPASS) { Error_Handler(); }
   if (xTaskCreate(KalmanTask, "Kalman", KALMAN_TASK_STACK, NULL, KALMAN_TASK_PRIO, NULL) != pdPASS) { Error_Handler(); }
   if (xTaskCreate(PidTask,    "Pid",    PID_TASK_STACK,    NULL, PID_TASK_PRIO,    NULL) != pdPASS) { Error_Handler(); }

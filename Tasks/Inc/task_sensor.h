@@ -1,8 +1,8 @@
 /**
   ******************************************************************************
   * @file    task_sensor.h
-  * @brief   Task de FreeRTOS del sensor HC-SR04: dispara, espera el aviso de la
-  *          ISR, lee la distancia y la reporta por UART.
+  * @brief   Task del sensor HC-SR04: dispara la medicion con el tick de 100 ms,
+  *          espera el aviso de la ISR y publica la distancia en QueuePos.
   ******************************************************************************
   */
 
