@@ -1,7 +1,7 @@
 /**
   ******************************************************************************
   * @file    app_config.h
-  * @brief   Configuracion de la aplicacion ball-and-beam. Un unico lugar para
+  * @brief   Configuracion de la aplicacion sistema de control PID para balanceo. Un unico lugar para
   *          las constantes del montaje fisico, las ganancias del lazo de control
   *          y los parametros de las tasks de FreeRTOS.
   ******************************************************************************

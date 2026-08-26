@@ -1,7 +1,7 @@
 /**
   ******************************************************************************
   * @file    app.c
-  * @brief   Wiring de la aplicacion ball-and-beam: instancias de drivers, IPC
+  * @brief   Wiring de la aplicacion sistema de control PID para balanceo: instancias de drivers, IPC
   *          (4 colas + queue set + 2 semaforos), hooks de ISR, arranque de los
   *          perifericos de tiempo real y creacion de las 5 tasks.
   ******************************************************************************

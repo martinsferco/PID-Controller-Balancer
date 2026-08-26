@@ -1,7 +1,7 @@
 /**
   ******************************************************************************
   * @file    app.h
-  * @brief   Capa de wiring de la aplicacion ball-and-beam. Concentra las
+  * @brief   Capa de wiring de la aplicacion sistema de control PID para balanceo. Concentra las
   *          instancias de drivers, los objetos de IPC (colas, queue set,
   *          semaforos) y los hooks de ISR. Punto de entrada: App_Init().
   ******************************************************************************
