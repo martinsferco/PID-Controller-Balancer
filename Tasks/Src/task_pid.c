@@ -6,6 +6,10 @@
   *          Con cada posicion nueva recalcula la accion de control, la mapea a
   *          un angulo de servo y lo publica en QueueAngulo; con cada setpoint
   *          nuevo solo actualiza la referencia.
+  *
+  *          Usa PID_ComputeRate (no PID_Compute) porque el Kalman ya entrega la
+  *          velocidad estimada junto con la posicion: se aprovecha esa velocidad
+  *          en vez de estimarla por diferencia finita de posiciones cuantizadas.
   ******************************************************************************
   */
 
