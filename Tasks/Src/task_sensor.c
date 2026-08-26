@@ -42,9 +42,6 @@ void SensorTask(void *argument)
 
     if (HC_SR04_Trigger(&g_sensor) != HC_SR04_OK)
     {
-#if (APP_LOG_ENABLED == 1)
-      App_LogMsg("SENSOR: trigger rechazado (FSM ocupada)");
-#endif
       continue;
     }
 
@@ -53,21 +50,11 @@ void SensorTask(void *argument)
       /* Sin echo: GetDistance detecta el timeout y resetea la FSM a IDLE. */
       float descarte = 0.0f;
       (void)HC_SR04_GetDistance(&g_sensor, &descarte);
-#if (APP_LOG_ENABLED == 1)
-      App_LogMsg("SENSOR: sin echo (revisar TRIG/ECHO/divisor/VCC=5V)");
-#endif
       continue;
     }
 
     float dist = 0.0f;
     HC_SR04_Status st = HC_SR04_GetDistance(&g_sensor, &dist);
-
-    /* El driver escribe la distancia tanto con OK como con INVALID, asi que la
-     * traza muestra siempre lo que el sensor midio de verdad, incluso cuando la
-     * muestra se termina descartando. */
-#if (APP_LOG_ENABLED == 1)
-    if (st == HC_SR04_OK || st == HC_SR04_INVALID) { g_sensor_raw_cm = dist; }
-#endif
 
     if (st == HC_SR04_OK)
     {
@@ -86,12 +73,6 @@ void SensorTask(void *argument)
         float borde = (dist < SENSOR_MIN_CM) ? SENSOR_MIN_CM : SENSOR_MAX_CM;
         xQueueOverwrite(QueuePos, &borde);
       }
-#if (APP_LOG_ENABLED == 1)
-      else
-      {
-        App_LogMsgF("SENSOR: descartada (eco del ambiente), raw_cm=", dist);
-      }
-#endif
     }
   }
 }

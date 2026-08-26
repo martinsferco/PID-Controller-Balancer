@@ -22,11 +22,6 @@
 #include "tim.h"        /* htim4 */
 #include "adc.h"        /* hadc1 */
 
-#if (APP_LOG_ENABLED == 1)
-#include "usart.h"      /* huart2, para el retarget de printf */
-#include <stdio.h>
-#endif
-
 /* --- Instancias de drivers ------------------------------------------------ */
 HC_SR04_HandleTypeDef       g_sensor;
 Servo_HandleTypeDef         g_servo;
@@ -62,64 +57,10 @@ void App_OnTimerTick_FromISR(void)
   portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }
 
-/* ============================ Traza por UART ============================== */
-#if (APP_LOG_ENABLED == 1)
-
-volatile float g_sensor_raw_cm = 0.0f;
-
-/* Retarget de printf hacia USART2 (COM virtual del ST-Link). */
-int __io_putchar(int ch)
-{
-  HAL_UART_Transmit(&huart2, (uint8_t *)&ch, 1, HAL_MAX_DELAY);
-  return ch;
-}
-
-/* Imprime un float como signo + entero + 3 decimales (newlib-nano no trae %f). */
-static void print_f(float v)
-{
-  if (v < 0.0f) { printf("-"); v = -v; }
-  int ip = (int)v;
-  int fp = (int)((v - (float)ip) * 1000.0f + 0.5f);
-  if (fp >= 1000) { ip += 1; fp -= 1000; }
-  printf("%d.%03d", ip, fp);
-}
-
-void App_LogTrace(float z, float pos_fil, float vel, float sp, float u,
-                  float integ, float angle)
-{
-  printf("z=");    print_f(z);
-  printf(" fil="); print_f(pos_fil);
-  printf(" vel="); print_f(vel);
-  printf(" sp=");  print_f(sp);
-  printf(" u=");   print_f(u);
-  printf(" i=");   print_f(integ);
-  printf(" ang="); print_f(angle);
-  printf("\r\n");
-}
-
-void App_LogMsg(const char *msg)
-{
-  printf("%s\r\n", msg);
-}
-
-void App_LogMsgF(const char *msg, float v)
-{
-  printf("%s", msg);
-  print_f(v);
-  printf("\r\n");
-}
-
-#endif /* APP_LOG_ENABLED */
-
 /* ============================ Inicializacion ============================== */
 
 void App_Init(void)
 {
-#if (APP_LOG_ENABLED == 1)
-  App_LogMsg("\r\n=== BALL & BEAM ===");
-  App_LogMsg("formato: z=cruda fil=kalman vel=kalman sp=objetivo u=pid i=integral ang=servo");
-#endif
-
   /* --- Semaforos binarios --- */
   SemTimer  = xSemaphoreCreateBinary();
   SemSensor = xSemaphoreCreateBinary();

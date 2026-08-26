@@ -64,24 +64,6 @@ void App_OnSensorComplete_FromISR(HC_SR04_HandleTypeDef *h);
 /** @brief Hook del TIM4 (ISR cada 100 ms): da SemTimer (tick del sensor). */
 void App_OnTimerTick_FromISR(void);
 
-/* --- Traza por UART (solo con APP_LOG_ENABLED = 1) ------------------------ */
-#if (APP_LOG_ENABLED == 1)
-
-/** @brief Ultima distancia cruda medida, para la columna `z` de la traza. */
-extern volatile float g_sensor_raw_cm;
-
-/** @brief Una linea de traza del lazo: z / fil / vel / sp / u / i / ang. */
-void App_LogTrace(float z, float pos_fil, float vel, float sp, float u,
-                  float integ, float angle);
-
-/** @brief Mensaje suelto (banner, estado del sensor, etc.). */
-void App_LogMsg(const char *msg);
-
-/** @brief Mensaje + un float (ej. "SENSOR: descartada, raw_cm=" 45.230). */
-void App_LogMsgF(const char *msg, float v);
-
-#endif /* APP_LOG_ENABLED */
-
 #ifdef __cplusplus
 }
 #endif
