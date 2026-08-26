@@ -22,6 +22,7 @@ extern "C" {
 #endif
 
 #include "main.h"
+#include "bsp_types.h"
 #include <stdint.h>
 
 typedef enum {
@@ -40,12 +41,10 @@ typedef struct {
   * @brief  Inicializa el servo y arranca la generacion PWM. Recorrido inicial:
   *         todo 0..180 (sin guarda), y queda parado en 90 grados, que es la
   *         posicion segura mientras la aplicacion no declare la suya.
-  * @param  htim    timer ya inicializado por CubeMX en PWM
-  * @param  channel TIM_CHANNEL_1..4
+  * @param  pwm  timer + canal en modo PWM
   */
 Servo_Status Servo_Init(Servo_HandleTypeDef *s,
-                        TIM_HandleTypeDef *htim,
-                        uint32_t channel);
+                        TimerChannel_t pwm);
 
 /**
   * @brief  Declara el recorrido PERMITIDO, en grados, dentro de 0..180.

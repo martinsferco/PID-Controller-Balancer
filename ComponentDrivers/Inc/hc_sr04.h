@@ -23,6 +23,7 @@ extern "C" {
 #endif
 
 #include "main.h"   /* trae stm32f4xx_hal.h y los tipos HAL */
+#include "bsp_types.h"
 #include <stdint.h>
 
 /* Estados de retorno de la API */
@@ -69,18 +70,14 @@ struct HC_SR04_Handle {
 
 /**
   * @brief  Inicializa una instancia del sensor y la registra para su uso.
-  * @param  h         puntero al handle (lo provee el usuario, sin malloc)
-  * @param  htim      timer ya inicializado por CubeMX en Input Capture
-  * @param  channel   timer channel usado para el ECHO
-  * @param  trig_port puerto del pin TRIG
-  * @param  trig_pin  pin TRIG
+  * @param  h     puntero al handle (lo provee el usuario, sin malloc)
+  * @param  echo  timer + canal de Input Capture del ECHO
+  * @param  trig  pin de salida del TRIG
   * @retval HC_SR04_OK / HC_SR04_ERROR
   */
 HC_SR04_Status HC_SR04_Init(HC_SR04_HandleTypeDef *h,
-                            TIM_HandleTypeDef *htim,
-                            uint32_t channel,
-                            GPIO_TypeDef *trig_port,
-                            uint16_t trig_pin);
+                            TimerChannel_t echo,
+                            GpioPin_t trig);
 
 /**
   * @brief  Setea el hook que se llama al completar una medicion (contexto ISR).
