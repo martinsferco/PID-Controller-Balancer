@@ -107,13 +107,12 @@ void App_Init(void)
   if (Servo_SetTravel(servo, SERVO_MIN_DEG, SERVO_MAX_DEG) != SERVO_OK) { Error_Handler(); }
   Servo_SetAngle(servo, SERVO_LEVEL_DEG);   /* barra nivelada antes de las tasks */
 
-  /* --- Potenciometro: Create + Init + rango (el ADC ya lo configuro CubeMX) --- */
+  /* --- Potenciometro: Create + Init (el ADC ya lo configuro CubeMX) ---
+   * El pote solo lee normalizado; el mapeo a cm del setpoint
+   * (POTENTIOMETER_MIN_CM/MAX_CM via linear_map) lo hace PotTask. */
   Potentiometer_HandleTypeDef *pot = Potentiometer_Create();
   if (pot == NULL) { Error_Handler(); }
   if (Potentiometer_Init(pot, &hadc1) != POTENTIOMETER_OK) { Error_Handler(); }
-  if (Potentiometer_SetRange(pot,
-                             POTENTIOMETER_MIN_CM,
-                             POTENTIOMETER_MAX_CM) != POTENTIOMETER_OK) { Error_Handler(); }
 
   /* --- PID: Create + Init + limites + banda de integracion --- */
   PID_HandleTypeDef *pid = PID_Create();

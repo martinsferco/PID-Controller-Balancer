@@ -11,16 +11,12 @@
 struct Potentiometer {
     ADC_HandleTypeDef *hadc;        /* ADC ya inicializado por CubeMX          */
     uint32_t           full_scale;  /* valor maximo del ADC (def 4095 = 12b)   */
-    float              min_cm;      /* cm en el extremo bajo del pote (def 0)   */
-    float              max_cm;      /* cm en el extremo alto del pote (def 100) */
     uint32_t           timeout_ms;  /* timeout del poll (def 10 ms)            */
 };
 
-/* Defaults de Init (el rango de salida es overridable con Potentiometer_SetRange). */
+/* Defaults de Init. */
 #define POTENTIOMETER_DEFAULT_FULL_SCALE  4095u   /* ADC 12 bits */
 #define POTENTIOMETER_DEFAULT_TIMEOUT_MS  10u
-#define POTENTIOMETER_DEFAULT_MIN_CM      0.0f
-#define POTENTIOMETER_DEFAULT_MAX_CM      100.0f
 
 /* Pool estatico de handles: el driver es dueno de la memoria (sin malloc). */
 #ifndef POTENTIOMETER_MAX_INSTANCES
@@ -44,20 +40,7 @@ Potentiometer_Status Potentiometer_Init(Potentiometer_HandleTypeDef *p,
     }
     p->hadc       = hadc;
     p->full_scale = POTENTIOMETER_DEFAULT_FULL_SCALE;
-    p->min_cm     = POTENTIOMETER_DEFAULT_MIN_CM;
-    p->max_cm     = POTENTIOMETER_DEFAULT_MAX_CM;
     p->timeout_ms = POTENTIOMETER_DEFAULT_TIMEOUT_MS;
-    return POTENTIOMETER_OK;
-}
-
-Potentiometer_Status Potentiometer_SetRange(Potentiometer_HandleTypeDef *p,
-                                            float min_cm, float max_cm)
-{
-    if (p == NULL || max_cm <= min_cm) {
-        return POTENTIOMETER_ERROR;
-    }
-    p->min_cm = min_cm;
-    p->max_cm = max_cm;
     return POTENTIOMETER_OK;
 }
 
@@ -83,9 +66,9 @@ static Potentiometer_Status potentiometer_read_raw(Potentiometer_HandleTypeDef *
     return POTENTIOMETER_OK;
 }
 
-Potentiometer_Status Potentiometer_ReadPosition_cm(Potentiometer_HandleTypeDef *p, float *out_cm)
+Potentiometer_Status Potentiometer_ReadNormalized(Potentiometer_HandleTypeDef *p, float *out)
 {
-    if (p == NULL || out_cm == NULL) {
+    if (p == NULL || out == NULL) {
         return POTENTIOMETER_ERROR;
     }
 
@@ -99,6 +82,6 @@ Potentiometer_Status Potentiometer_ReadPosition_cm(Potentiometer_HandleTypeDef *
         raw = p->full_scale;   /* seguridad */
     }
 
-    *out_cm = p->min_cm + ((float)raw / (float)p->full_scale) * (p->max_cm - p->min_cm);
+    *out = (float)raw / (float)p->full_scale;
     return POTENTIOMETER_OK;
 }
