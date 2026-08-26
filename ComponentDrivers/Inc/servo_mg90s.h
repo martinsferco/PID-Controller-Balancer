@@ -2,25 +2,12 @@
   ******************************************************************************
   * @file    servo_mg90s.h
   * @brief   Driver HAL para servo MG90S (y similares de hobby) por PWM.
+  *          Interfaz en grados (escala 0..180); los microsegundos son asunto del
+  *          driver. La aplicacion solo declara el recorrido permitido con
+  *          Servo_SetTravel, y Servo_SetAngle satura a ese recorrido.
+  *          RTOS-agnostico y multi-instancia.
   *
-  *          INTERFAZ EN GRADOS, escala 0..180:
-  *              0 grados -> horn en un extremo (SERVO_MIN_US)
-  *             90 grados -> centro             (1500 us)
-  *            180 grados -> horn en el otro    (SERVO_MAX_US)
-  *
-  *          La recta us <-> grados no se expone: es parte del driver, porque un
-  *          MG90S recorre sus 180 grados entre 500 y 2500 us y eso es un hecho
-  *          del componente, no una decision de la aplicacion. Los microsegundos
-  *          no aparecen en ninguna llamada.
-  *
-  *          Lo unico que declara la aplicacion es el RECORRIDO PERMITIDO en
-  *          grados (Servo_SetTravel), o sea cuanta guarda quiere dejar contra
-  *          los topes fisicos. Servo_SetAngle satura a ese recorrido, asi que el
-  *          limite vale para todo llamador y ninguna task repite el clamp.
-  *
-  *          RTOS-agnostico: solo usa HAL. Multi-instancia.
-  *
-  *          Requisitos de CubeMX (ver Manual_CubeMX_Servo.md):
+  *          Requisitos de CubeMX:
   *            - TIM en PWM Generation, con el Prescaler que de 1 us/tick
   *              (PSC = MHz del timer - 1; en este proyecto 16 MHz -> PSC=15) y
   *              ARR=19999 (20 ms -> 50 Hz). Asi el CCR en cuentas equivale a us.

@@ -1,20 +1,11 @@
 /**
   ******************************************************************************
   * @file    hc_sr04.h
-  * @brief   Driver HAL para el sensor ultrasonico HC-SR04. La medicion del ECHO
-  *          es por Input Capture basada en interrupciones (sin busy-waiting); el
-  *          unico busy-wait es el pulso de TRIG de 10 us.
+  * @brief   Driver HAL para el sensor ultrasonico HC-SR04: mide distancia.
+  *          No bloqueante, RTOS-agnostico y multi-instancia. Al completar una
+  *          medicion invoca un hook opcional (ver HC_SR04_SetCompleteCallback).
   *
-  *          Caracteristicas:
-  *            - Multi-instancia (varios sensores con distinto TRIG/canal de TIM).
-  *            - Sin variables globales compartidas (salvo el registro interno de
-  *              instancias necesario por el callback global del HAL).
-  *            - Manejo de timeout y descarte de lecturas fuera de rango.
-  *            - RTOS-agnostico: no llama a FreeRTOS. Expone un hook (puntero a
-  *              funcion) que se invoca al completar una medicion; desde ahi vos
-  *              podes dar un semaforo con xSemaphoreGiveFromISR(), etc.
-  *
-  *          Requisitos de CubeMX (ver Manual_CubeMX_HCSR04.md):
+  *          Requisitos de CubeMX:
   *            - TIM en Input Capture direct mode, con el Prescaler que de 1 us/tick
   *              (PSC = MHz del timer - 1; en este proyecto 16 MHz -> PSC=15).
   *            - Preferentemente un timer de 32 bits (TIM2/TIM5): la medicion y el

@@ -1,15 +1,11 @@
 /**
   ******************************************************************************
   * @file    potentiometer.h
-  * @brief   Driver HAL para leer un potenciometro lineal por ADC (polling).
+  * @brief   Driver HAL para leer un potenciometro lineal por ADC (polling) y
+  *          mapear la lectura a una posicion en cm. Pensado para baja frecuencia
+  *          (ej. cada 200 ms). RTOS-agnostico.
   *
-  *          Lee el canal del ADC por software (sin DMA ni interrupciones) y
-  *          mapea el valor crudo (0..resolution) a una posicion fisica en cm.
-  *          Pensado para lecturas a baja frecuencia (ej. cada 200 ms).
-  *
-  *          RTOS-agnostico: solo usa HAL.
-  *
-  *          Requisitos de CubeMX (ver Manual_CubeMX.md):
+  *          Requisitos de CubeMX:
   *            - ADC con el canal del potenciometro habilitado, 12 bits,
   *              Continuous Conversion = Disabled, sampling time alto.
   ******************************************************************************
