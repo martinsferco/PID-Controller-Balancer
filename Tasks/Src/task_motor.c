@@ -60,9 +60,6 @@ void MotorTask(void *argument)
        * entregue queda congelado en vez de acumular. */
       perdida = 1u;
       Servo_SetAngle(&g_servo, SERVO_LEVEL_DEG);
-#if (APP_LOG_ENABLED == 1)
-      App_LogMsg("MOTOR: sin angulo nuevo -> barra NIVELADA (failsafe)");
-#endif
     }
   }
 }

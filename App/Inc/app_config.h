@@ -10,12 +10,6 @@
 #ifndef APP_CONFIG_H
 #define APP_CONFIG_H
 
-/* ============================= Traza por UART =============================
- * Con 1 la aplicacion imprime por USART2 (COM virtual del ST-Link, 115200 8N1)
- * el banner de arranque y una linea por ciclo con el estado del lazo. Con 0 no
- * se compila nada de eso y el lazo corre igual. */
-#define APP_LOG_ENABLED         1
-
 /* ============================= Montaje fisico ============================= */
 
 /* Largo util de la barra, medido DESDE LA CARA DEL SENSOR. */
