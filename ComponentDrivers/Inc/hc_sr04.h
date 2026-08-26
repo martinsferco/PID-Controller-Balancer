@@ -65,11 +65,6 @@ HC_SR04_Status HC_SR04_Init(HC_SR04_HandleTypeDef *h,
 void HC_SR04_SetCompleteCallback(HC_SR04_HandleTypeDef *h, HC_SR04_CompleteCallback cb);
 
 /**
-  * @brief  Ajusta el rango valido de medicion en cm.
-  */
-void HC_SR04_SetRange(HC_SR04_HandleTypeDef *h, float min_cm, float max_cm);
-
-/**
   * @brief  Dispara una nueva medicion: pulso TRIG de 10 us y arma la captura
   *         del ECHO por interrupcion. No bloquea.
   * @retval HC_SR04_OK si se disparo / HC_SR04_BUSY si ya hay una en curso
