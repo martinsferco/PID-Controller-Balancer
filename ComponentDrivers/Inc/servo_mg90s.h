@@ -24,19 +24,6 @@ extern "C" {
 #include "main.h"
 #include <stdint.h>
 
-/* La recta del componente. Cambia solo si se cambia de servo. 500 y 2500 us son
- * los extremos FISICOS del MG90S: ahi el horn ya esta contra su tope interno, y
- * sostenerlo ahi lo quema. Por eso son a la vez los extremos de la escala
- * angular y el limite duro que el driver nunca cruza. */
-#define SERVO_MIN_US        500u
-#define SERVO_MAX_US        2500u
-#define SERVO_MIN_ANGLE     0.0f
-#define SERVO_MAX_ANGLE     180.0f
-
-/* us por grado (11.111 en un MG90S). */
-#define SERVO_US_PER_DEG    (((float)(SERVO_MAX_US - SERVO_MIN_US)) / \
-                             (SERVO_MAX_ANGLE - SERVO_MIN_ANGLE))
-
 typedef enum {
     SERVO_OK = 0,
     SERVO_ERROR
