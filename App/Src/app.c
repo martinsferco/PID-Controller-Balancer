@@ -89,13 +89,14 @@ void App_Init(void)
   if (xQueueAddToSet(QueuePosFil,   QueueSetPid) != pdPASS) { Error_Handler(); }
   if (xQueueAddToSet(QueueObjetivo, QueueSetPid) != pdPASS) { Error_Handler(); }
 
-  /* --- Sensor HC-SR04: Create + Init + rango + callback --- */
+  /* --- Sensor HC-SR04: Create + Init + callback ---
+   * El rango fisico del sensor es fijo (constantes de hardware en el driver);
+   * la ventana util de la barra vive en SensorTask (SENSOR_MIN_CM/MAX_CM). */
   s_sensor = HC_SR04_Create();
   if (s_sensor == NULL) { Error_Handler(); }
   TimerChannel_t echo = { &htim2, TIM_CHANNEL_1 };
   GpioPin_t      trig = { TRIG_GPIO_Port, TRIG_Pin };
   if (HC_SR04_Init(s_sensor, echo, trig) != HC_SR04_OK) { Error_Handler(); }
-  HC_SR04_SetRange(s_sensor, SENSOR_MIN_CM, SENSOR_MAX_CM);
   HC_SR04_SetCompleteCallback(s_sensor, App_OnSensorComplete_FromISR);
 
   /* --- Servo MG90S: Create + Init + recorrido + nivelar al arranque --- */

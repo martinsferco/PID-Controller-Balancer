@@ -37,10 +37,6 @@ struct HC_SR04_Handle {
     GPIO_TypeDef      *trig_port;  /* puerto del pin TRIG                    */
     uint16_t           trig_pin;   /* pin TRIG                               */
 
-    float    min_cm;               /* lectura minima valida (def 2.0)        */
-    float    max_cm;               /* lectura maxima valida (def 400.0)      */
-    uint32_t timeout_ms;           /* timeout de medicion (def 60 ms)        */
-
     volatile HC_SR04_MeasureState state;
     volatile uint32_t t_rise;      /* captura del flanco de subida [us]      */
     volatile uint32_t t_fall;      /* captura del flanco de bajada [us]      */
@@ -54,10 +50,14 @@ struct HC_SR04_Handle {
 #define HC_SR04_ECHO_US_PER_CM 58.0f
 #define HC_SR04_TRIG_PULSE_US  10u
 
-/* Defaults de Init (overridables con HC_SR04_SetRange). */
-#define HC_SR04_DEFAULT_MIN_CM      2.0f
-#define HC_SR04_DEFAULT_MAX_CM      400.0f
-#define HC_SR04_DEFAULT_TIMEOUT_MS  60u    /* echo maximo ~38 ms + margen */
+/* Limites FISICOS del HC-SR04 (datasheet): NO son configurables. El driver ES
+ * el HC-SR04, asi que su rango es un hecho del componente. Otro sensor de
+ * distancia = otro modulo. Fuera de estos limites el eco es imposible y la
+ * lectura se marca INVALID. La ventana util de la barra (recorte a la zona de
+ * la pelota) es politica de la aplicacion y vive en task_sensor. */
+#define HC_SR04_HW_MIN_CM      2.0f
+#define HC_SR04_HW_MAX_CM      450.0f
+#define HC_SR04_HW_TIMEOUT_MS  30u    /* eco maximo ~25 ms + margen */
 
 /* Registro interno de instancias para el dispatch del callback global del HAL. */
 #ifndef HC_SR04_MAX_INSTANCES
@@ -136,11 +136,6 @@ HC_SR04_Status HC_SR04_Init(HC_SR04_HandleTypeDef *h,
     h->trig_port  = trig.port;
     h->trig_pin   = trig.pin;
 
-    /* Defaults (overridables con HC_SR04_SetRange) */
-    h->min_cm      = HC_SR04_DEFAULT_MIN_CM;
-    h->max_cm      = HC_SR04_DEFAULT_MAX_CM;
-    h->timeout_ms  = HC_SR04_DEFAULT_TIMEOUT_MS;
-
     h->state        = HC_SR04_STATE_IDLE;
     h->t_rise       = 0;
     h->t_fall       = 0;
@@ -170,14 +165,6 @@ void HC_SR04_SetCompleteCallback(HC_SR04_HandleTypeDef *h, HC_SR04_CompleteCallb
 {
     if (h != NULL) {
         h->on_complete = cb;
-    }
-}
-
-void HC_SR04_SetRange(HC_SR04_HandleTypeDef *h, float min_cm, float max_cm)
-{
-    if (h != NULL && max_cm > min_cm) {
-        h->min_cm = min_cm;
-        h->max_cm = max_cm;
     }
 }
 
@@ -225,7 +212,7 @@ HC_SR04_Status HC_SR04_GetDistance(HC_SR04_HandleTypeDef *h, float *out_cm)
          * que es la pista mas util para diagnosticar apuntado o rango mal
          * configurado. El status sigue siendo el que manda. */
         *out_cm = d;
-        if (d < h->min_cm || d > h->max_cm) {
+        if (d < HC_SR04_HW_MIN_CM || d > HC_SR04_HW_MAX_CM) {
             return HC_SR04_INVALID;
         }
         return HC_SR04_OK;
@@ -233,7 +220,7 @@ HC_SR04_Status HC_SR04_GetDistance(HC_SR04_HandleTypeDef *h, float *out_cm)
 
     /* Sin dato todavia: chequear timeout (no bloqueante) */
     if (h->state != HC_SR04_STATE_IDLE) {
-        if ((HAL_GetTick() - h->trigger_tick) > h->timeout_ms) {
+        if ((HAL_GetTick() - h->trigger_tick) > HC_SR04_HW_TIMEOUT_MS) {
             HAL_TIM_IC_Stop_IT(h->htim, h->channel);
             h->state = HC_SR04_STATE_IDLE;
             return HC_SR04_TIMEOUT;
