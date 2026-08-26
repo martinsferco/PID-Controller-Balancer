@@ -7,11 +7,34 @@
 
 #include "potentiometer.h"
 
+/* Definicion del struct opaco (oculta a los usuarios del .h). */
+struct Potentiometer {
+    ADC_HandleTypeDef *hadc;        /* ADC ya inicializado por CubeMX          */
+    uint32_t           full_scale;  /* valor maximo del ADC (def 4095 = 12b)   */
+    float              min_cm;      /* cm en el extremo bajo del pote (def 0)   */
+    float              max_cm;      /* cm en el extremo alto del pote (def 100) */
+    uint32_t           timeout_ms;  /* timeout del poll (def 10 ms)            */
+};
+
 /* Defaults de Init (el rango de salida es overridable con Potentiometer_SetRange). */
 #define POTENTIOMETER_DEFAULT_FULL_SCALE  4095u   /* ADC 12 bits */
 #define POTENTIOMETER_DEFAULT_TIMEOUT_MS  10u
 #define POTENTIOMETER_DEFAULT_MIN_CM      0.0f
 #define POTENTIOMETER_DEFAULT_MAX_CM      100.0f
+
+/* Pool estatico de handles: el driver es dueno de la memoria (sin malloc). */
+#ifndef POTENTIOMETER_MAX_INSTANCES
+#define POTENTIOMETER_MAX_INSTANCES  1
+#endif
+
+static struct Potentiometer s_pool[POTENTIOMETER_MAX_INSTANCES];
+static unsigned             s_pool_count = 0u;
+
+Potentiometer_HandleTypeDef *Potentiometer_Create(void)
+{
+    if (s_pool_count >= POTENTIOMETER_MAX_INSTANCES) { return 0; }
+    return &s_pool[s_pool_count++];
+}
 
 Potentiometer_Status Potentiometer_Init(Potentiometer_HandleTypeDef *p,
                                         ADC_HandleTypeDef *hadc)

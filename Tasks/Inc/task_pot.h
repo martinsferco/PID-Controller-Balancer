@@ -12,6 +12,16 @@
 extern "C" {
 #endif
 
+#include "potentiometer.h"
+#include "FreeRTOS.h"
+#include "queue.h"
+
+/** @brief Todo lo que usa PotTask (handle ya configurado + IPC). */
+typedef struct {
+    Potentiometer_HandleTypeDef *pot;             /* pote ya inicializado     */
+    QueueHandle_t                queue_objetivo;  /* salida: setpoint          */
+} TaskPotContext;
+
 void PotTask(void *argument);
 
 #ifdef __cplusplus

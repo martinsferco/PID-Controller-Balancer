@@ -22,6 +22,34 @@
 
 #include "hc_sr04.h"
 
+/* Estado interno de la maquina de captura (oculto: es interno de la FSM). */
+typedef enum {
+    HC_SR04_STATE_IDLE = 0,
+    HC_SR04_STATE_WAIT_RISE,
+    HC_SR04_STATE_WAIT_FALL
+} HC_SR04_MeasureState;
+
+/* Definicion del struct opaco (oculta a los usuarios del .h). */
+struct HC_SR04_Handle {
+    TIM_HandleTypeDef *htim;       /* timer en modo Input Capture            */
+    uint32_t           channel;    /* TIM_CHANNEL_1..4                       */
+    uint32_t           active_ch;  /* HAL_TIM_ACTIVE_CHANNEL_x (uso interno) */
+    GPIO_TypeDef      *trig_port;  /* puerto del pin TRIG                    */
+    uint16_t           trig_pin;   /* pin TRIG                               */
+
+    float    min_cm;               /* lectura minima valida (def 2.0)        */
+    float    max_cm;               /* lectura maxima valida (def 400.0)      */
+    uint32_t timeout_ms;           /* timeout de medicion (def 60 ms)        */
+
+    volatile HC_SR04_MeasureState state;
+    volatile uint32_t t_rise;      /* captura del flanco de subida [us]      */
+    volatile uint32_t t_fall;      /* captura del flanco de bajada [us]      */
+    volatile uint8_t  data_ready;  /* hay dato nuevo sin leer                */
+    uint32_t          trigger_tick;/* HAL_GetTick() al disparar (timeout)    */
+
+    HC_SR04_CompleteCallback on_complete;
+};
+
 /* Velocidad del sonido: 343 m/s -> 29.15 us/cm (ida) -> 58.3 us/cm (ida+vuelta) */
 #define HC_SR04_ECHO_US_PER_CM 58.0f
 #define HC_SR04_TRIG_PULSE_US  10u
@@ -37,6 +65,18 @@
 #endif
 
 static HC_SR04_HandleTypeDef *s_instances[HC_SR04_MAX_INSTANCES] = {0};
+
+/* Pool estatico de handles: el driver es dueno de la memoria (sin malloc).
+ * Distinto de s_instances, que es el registro de punteros para el dispatch de
+ * la ISR del HAL. */
+static struct HC_SR04_Handle s_pool[HC_SR04_MAX_INSTANCES];
+static unsigned              s_pool_count = 0u;
+
+HC_SR04_HandleTypeDef *HC_SR04_Create(void)
+{
+    if (s_pool_count >= HC_SR04_MAX_INSTANCES) { return 0; }
+    return &s_pool[s_pool_count++];
+}
 
 /* ------------------------------------------------------------------------- */
 /* Utilidades internas                                                       */

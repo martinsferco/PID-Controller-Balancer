@@ -16,6 +16,28 @@
 
 /* ============================ Internos ==================================== */
 
+/* Definicion del struct opaco (oculta a los usuarios del .h). */
+struct Servo {
+    TIM_HandleTypeDef *htim;     /* timer en modo PWM                         */
+    uint32_t           channel;  /* TIM_CHANNEL_1..4                          */
+    float              min_deg;  /* recorrido permitido: piso (ver SetTravel) */
+    float              max_deg;  /* recorrido permitido: techo                */
+};
+
+/* Pool estatico de handles: el driver es dueno de la memoria (sin malloc). */
+#ifndef SERVO_MAX_INSTANCES
+#define SERVO_MAX_INSTANCES  1
+#endif
+
+static struct Servo s_pool[SERVO_MAX_INSTANCES];
+static unsigned     s_pool_count = 0u;
+
+Servo_HandleTypeDef *Servo_Create(void)
+{
+    if (s_pool_count >= SERVO_MAX_INSTANCES) { return 0; }
+    return &s_pool[s_pool_count++];
+}
+
 /* La recta del componente. Cambia solo si se cambia de servo. 500 y 2500 us son
  * los extremos FISICOS del MG90S: ahi el horn ya esta contra su tope interno, y
  * sostenerlo ahi lo quema. Por eso son a la vez los extremos de la escala

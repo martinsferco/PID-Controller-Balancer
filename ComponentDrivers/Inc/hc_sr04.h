@@ -35,42 +35,21 @@ typedef enum {
     HC_SR04_ERROR       /* parametros invalidos / fallo de HAL            */
 } HC_SR04_Status;
 
-/* Estado interno de la maquina de captura */
-typedef enum {
-    HC_SR04_STATE_IDLE = 0,
-    HC_SR04_STATE_WAIT_RISE,
-    HC_SR04_STATE_WAIT_FALL
-} HC_SR04_MeasureState;
-
 typedef struct HC_SR04_Handle HC_SR04_HandleTypeDef;
 
 /* Hook opcional invocado (en contexto de ISR) al completar una medicion.
  * Usalo para dar un semaforo a tu TaskSensor: ...GiveFromISR(). */
 typedef void (*HC_SR04_CompleteCallback)(HC_SR04_HandleTypeDef *h);
 
-struct HC_SR04_Handle {
-    TIM_HandleTypeDef *htim;       /* timer en modo Input Capture            */
-    uint32_t           channel;    /* TIM_CHANNEL_1..4                       */
-    uint32_t           active_ch;  /* HAL_TIM_ACTIVE_CHANNEL_x (uso interno) */
-    GPIO_TypeDef      *trig_port;  /* puerto del pin TRIG                    */
-    uint16_t           trig_pin;   /* pin TRIG                               */
-
-    float    min_cm;               /* lectura minima valida (def 2.0)        */
-    float    max_cm;               /* lectura maxima valida (def 400.0)      */
-    uint32_t timeout_ms;           /* timeout de medicion (def 60 ms)        */
-
-    volatile HC_SR04_MeasureState state;
-    volatile uint32_t t_rise;      /* captura del flanco de subida [us]      */
-    volatile uint32_t t_fall;      /* captura del flanco de bajada [us]      */
-    volatile uint8_t  data_ready;  /* hay dato nuevo sin leer                */
-    uint32_t          trigger_tick;/* HAL_GetTick() al disparar (timeout)    */
-
-    HC_SR04_CompleteCallback on_complete;
-};
+/**
+  * @brief  Reserva un handle de un pool estatico interno (sin malloc). Devuelve
+  *         NULL si el pool esta agotado. No hay Destroy.
+  */
+HC_SR04_HandleTypeDef *HC_SR04_Create(void);
 
 /**
   * @brief  Inicializa una instancia del sensor y la registra para su uso.
-  * @param  h     puntero al handle (lo provee el usuario, sin malloc)
+  * @param  h     handle obtenido de HC_SR04_Create()
   * @param  echo  timer + canal de Input Capture del ECHO
   * @param  trig  pin de salida del TRIG
   * @retval HC_SR04_OK / HC_SR04_ERROR

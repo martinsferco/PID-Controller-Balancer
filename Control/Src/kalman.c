@@ -7,14 +7,42 @@
 
 #include "kalman.h"
 
-static void kalman_reset_cov(Kalman_t *kf)
+/* Estado x = [pos, vel]^T. Modelo de transicion (velocidad constante):
+ *   F = [[1, dt],[0, 1]]      H = [1, 0]
+ * Q (ruido de proceso, aceleracion como white noise, densidad q):
+ *   Q = q * [[dt^3/3, dt^2/2],[dt^2/2, dt]]
+ * R = varianza de medicion (escalar). Struct opaco: se define aca. */
+struct Kalman {
+    float dt;                 /* paso de tiempo [s]                     */
+    float q;                  /* densidad de ruido de proceso           */
+    float r;                  /* varianza de medicion                   */
+    float x0;                 /* estado: posicion estimada              */
+    float x1;                 /* estado: velocidad estimada             */
+    float P00, P01, P10, P11; /* matriz de covarianza del error         */
+};
+
+/* Pool estatico de handles: el modulo es dueno de la memoria (sin malloc). */
+#ifndef KALMAN_MAX_INSTANCES
+#define KALMAN_MAX_INSTANCES  1
+#endif
+
+static struct Kalman s_pool[KALMAN_MAX_INSTANCES];
+static unsigned      s_pool_count = 0u;
+
+Kalman_HandleTypeDef *Kalman_Create(void)
+{
+    if (s_pool_count >= KALMAN_MAX_INSTANCES) { return 0; }
+    return &s_pool[s_pool_count++];
+}
+
+static void kalman_reset_cov(Kalman_HandleTypeDef *kf)
 {
     /* Covarianza inicial: incertidumbre moderada, sin correlacion. */
     kf->P00 = 1.0f; kf->P01 = 0.0f;
     kf->P10 = 0.0f; kf->P11 = 1.0f;
 }
 
-void Kalman_Init(Kalman_t *kf, float dt, float q, float r, float x0)
+void Kalman_Init(Kalman_HandleTypeDef *kf, float dt, float q, float r, float x0)
 {
     if (kf == 0) { return; }
     kf->dt = dt;
@@ -25,7 +53,7 @@ void Kalman_Init(Kalman_t *kf, float dt, float q, float r, float x0)
     kalman_reset_cov(kf);
 }
 
-void Kalman_Reset(Kalman_t *kf, float x0)
+void Kalman_Reset(Kalman_HandleTypeDef *kf, float x0)
 {
     if (kf == 0) { return; }
     kf->x0 = x0;
@@ -33,7 +61,7 @@ void Kalman_Reset(Kalman_t *kf, float x0)
     kalman_reset_cov(kf);
 }
 
-float Kalman_Update(Kalman_t *kf, float z)
+float Kalman_Update(Kalman_HandleTypeDef *kf, float z)
 {
     if (kf == 0) { return 0.0f; }
 
@@ -84,4 +112,10 @@ float Kalman_Update(Kalman_t *kf, float z)
     kf->P10 = n10; kf->P11 = n11;
 
     return kf->x0;
+}
+
+float Kalman_GetVelocity(const Kalman_HandleTypeDef *kf)
+{
+    if (kf == 0) { return 0.0f; }
+    return kf->x1;
 }

@@ -1,9 +1,9 @@
 /**
   ******************************************************************************
   * @file    app.h
-  * @brief   Capa de wiring de la aplicacion sistema de control PID para balanceo. Concentra las
-  *          instancias de drivers, los objetos de IPC (colas, queue set,
-  *          semaforos) y los hooks de ISR. Punto de entrada: App_Init().
+  * @brief   Capa de wiring de la aplicacion sistema de control PID para balanceo.
+  *          Punto de entrada: App_Init() (composition root). Expone tambien los
+  *          hooks de ISR y el tipo de mensaje que comparten Kalman y PID.
   ******************************************************************************
   */
 
@@ -14,23 +14,7 @@
 extern "C" {
 #endif
 
-#include "app_config.h"
-#include "FreeRTOS.h"
-#include "task.h"
-#include "semphr.h"
-#include "queue.h"
-#include "hc_sr04.h"
-#include "servo_mg90s.h"
-#include "potentiometer.h"
-
-/* --- Instancias de drivers (definidas en app.c) --------------------------- */
-extern HC_SR04_HandleTypeDef       g_sensor;         /* distancia (HC-SR04)  */
-extern Servo_HandleTypeDef         g_servo;          /* actuador (MG90S)     */
-extern Potentiometer_HandleTypeDef g_potentiometer;  /* setpoint (pote/ADC)  */
-
-/* --- Semaforos binarios --------------------------------------------------- */
-extern SemaphoreHandle_t SemTimer;   /* lo da la ISR de TIM4 (cada 100 ms)   */
-extern SemaphoreHandle_t SemSensor;  /* lo da la ISR de Input Capture (echo) */
+#include "hc_sr04.h"   /* tipo del handle que recibe el hook del sensor */
 
 /* --- Estado estimado que el Kalman le pasa al PID ------------------------- *
  * Los dos estados del filtro viajan JUNTOS, en un solo item de una sola cola,
@@ -43,18 +27,10 @@ typedef struct {
     float vel;   /* velocidad estimada [cm/s], positiva si pos crece          */
 } PosFil_t;
 
-/* --- Colas de profundidad 1 (xQueueOverwrite / xQueueReceive) ------------- */
-extern QueueHandle_t QueuePos;       /* sensor -> kalman (distancia cruda)    */
-extern QueueHandle_t QueuePosFil;    /* kalman -> pid    (PosFil_t: pos+vel)  */
-extern QueueHandle_t QueueObjetivo;  /* pot    -> pid    (setpoint)           */
-extern QueueHandle_t QueueAngulo;    /* pid    -> motor  (angulo)             */
-
-/* --- Queue set del PID (bloquea en QueuePosFil + QueueObjetivo a la vez) --- */
-extern QueueSetHandle_t QueueSetPid;
-
 /**
-  * @brief  Crea IPC + tasks y arranca los perifericos de tiempo real.
-  *         Llamar una sola vez desde USER CODE 2 de main.c.
+  * @brief  Composition root: crea drivers + IPC + contextos y las tasks, y
+  *         arranca los perifericos de tiempo real. Llamar una sola vez desde
+  *         USER CODE 2 de main.c.
   */
 void App_Init(void);
 
