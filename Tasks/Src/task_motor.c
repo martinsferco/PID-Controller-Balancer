@@ -26,7 +26,8 @@ void MotorTask(void *argument)
   /* Servo_Init arranca el PWM; Servo_SetTravel declara la guarda contra los
    * topes, que es lo unico que la aplicacion decide sobre el recorrido. Si
    * alguna de las dos falla, el servo quedaria sin limite: no se sigue. */
-  Servo_Status st = Servo_Init(&g_servo, &htim3, TIM_CHANNEL_1);
+  TimerChannel_t pwm = { &htim3, TIM_CHANNEL_1 };
+  Servo_Status st = Servo_Init(&g_servo, pwm);
   if (st == SERVO_OK)
   {
     st = Servo_SetTravel(&g_servo, SERVO_MIN_DEG, SERVO_MAX_DEG);

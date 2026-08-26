@@ -81,20 +81,20 @@ static void hc_sr04_delay_us(TIM_HandleTypeDef *htim, uint32_t us)
 /* ------------------------------------------------------------------------- */
 
 HC_SR04_Status HC_SR04_Init(HC_SR04_HandleTypeDef *h,
-                            TIM_HandleTypeDef *htim,
-                            uint32_t channel,
-                            GPIO_TypeDef *trig_port,
-                            uint16_t trig_pin)
+                            TimerChannel_t echo,
+                            GpioPin_t trig)
 {
-    if (h == NULL || htim == NULL || trig_port == NULL) {
+    if (h == NULL || echo.htim == NULL || trig.port == NULL) {
         return HC_SR04_ERROR;
     }
 
-    h->htim       = htim;
-    h->channel    = channel;
-    h->active_ch  = hc_sr04_active_channel(channel);
-    h->trig_port  = trig_port;
-    h->trig_pin   = trig_pin;
+    /* Se desarma el par: internamente el driver sigue usando htim/channel
+     * sueltos (y active_ch derivado). */
+    h->htim       = echo.htim;
+    h->channel    = echo.channel;
+    h->active_ch  = hc_sr04_active_channel(echo.channel);
+    h->trig_port  = trig.port;
+    h->trig_pin   = trig.pin;
 
     /* Defaults (overridables con HC_SR04_SetRange) */
     h->min_cm      = HC_SR04_DEFAULT_MIN_CM;

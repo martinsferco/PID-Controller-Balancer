@@ -28,7 +28,9 @@ void SensorTask(void *argument)
 {
   (void)argument;
 
-  HC_SR04_Init(&g_sensor, &htim2, TIM_CHANNEL_1, TRIG_GPIO_Port, TRIG_Pin);
+  TimerChannel_t echo = { &htim2, TIM_CHANNEL_1 };
+  GpioPin_t      trig = { TRIG_GPIO_Port, TRIG_Pin };
+  HC_SR04_Init(&g_sensor, echo, trig);
   HC_SR04_SetRange(&g_sensor, SENSOR_MIN_CM, SENSOR_MAX_CM);
   HC_SR04_SetCompleteCallback(&g_sensor, App_OnSensorComplete_FromISR);
 

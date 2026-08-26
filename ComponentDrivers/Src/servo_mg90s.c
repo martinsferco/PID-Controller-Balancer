@@ -53,15 +53,15 @@ static float servo_limit_deg(const Servo_HandleTypeDef *s, float deg)
 /* ============================== API ======================================= */
 
 Servo_Status Servo_Init(Servo_HandleTypeDef *s,
-                        TIM_HandleTypeDef *htim,
-                        uint32_t channel)
+                        TimerChannel_t pwm)
 {
-    if (s == NULL || htim == NULL) {
+    if (s == NULL || pwm.htim == NULL) {
         return SERVO_ERROR;
     }
 
-    s->htim    = htim;
-    s->channel = channel;
+    /* Se desarma el par: adentro el driver usa htim/channel sueltos. */
+    s->htim    = pwm.htim;
+    s->channel = pwm.channel;
     s->min_deg = SERVO_MIN_ANGLE;   /* sin guarda hasta que la declare la app */
     s->max_deg = SERVO_MAX_ANGLE;
 
