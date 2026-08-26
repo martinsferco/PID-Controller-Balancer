@@ -27,13 +27,13 @@ typedef enum {
     POTENTIOMETER_ERROR
 } Potentiometer_Status;
 
-typedef struct {
-    ADC_HandleTypeDef *hadc;        /* ADC ya inicializado por CubeMX        */
-    uint32_t           full_scale;  /* valor maximo del ADC (def 4095 = 12b) */
-    float              min_cm;      /* cm en el extremo bajo del pote (def 0) */
-    float              max_cm;      /* cm en el extremo alto del pote (def 100)*/
-    uint32_t           timeout_ms;  /* timeout del poll (def 10 ms)          */
-} Potentiometer_HandleTypeDef;
+typedef struct Potentiometer Potentiometer_HandleTypeDef;
+
+/**
+  * @brief  Reserva un handle de un pool estatico interno (sin malloc). Devuelve
+  *         NULL si el pool esta agotado. No hay Destroy.
+  */
+Potentiometer_HandleTypeDef *Potentiometer_Create(void);
 
 /**
   * @brief  Inicializa el potenciometro. El rango de salida arranca en un default

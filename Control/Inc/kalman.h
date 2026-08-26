@@ -4,6 +4,9 @@
   * @brief   Filtro de Kalman 1D con 2 estados [posicion, velocidad], modelo de
   *          velocidad constante. Modulo PURO: solo <float>, sin HAL ni FreeRTOS
   *          (compilable en host si algun dia se instala gcc).
+  *
+  *          El struct es opaco (definido en kalman.c): el handle se pide con
+  *          Kalman_Create() y se opera por la interfaz.
   ******************************************************************************
   */
 
@@ -14,19 +17,13 @@
 extern "C" {
 #endif
 
-/* Estado x = [pos, vel]^T. Modelo de transicion (velocidad constante):
- *   F = [[1, dt],[0, 1]]      H = [1, 0]
- * Q (ruido de proceso, aceleracion como white noise, densidad q):
- *   Q = q * [[dt^3/3, dt^2/2],[dt^2/2, dt]]
- * R = varianza de medicion (escalar). */
-typedef struct {
-    float dt;                 /* paso de tiempo [s]                     */
-    float q;                  /* densidad de ruido de proceso           */
-    float r;                  /* varianza de medicion                   */
-    float x0;                 /* estado: posicion estimada              */
-    float x1;                 /* estado: velocidad estimada             */
-    float P00, P01, P10, P11; /* matriz de covarianza del error         */
-} Kalman_t;
+typedef struct Kalman Kalman_HandleTypeDef;
+
+/**
+  * @brief  Reserva un handle de un pool estatico interno (sin malloc). Devuelve
+  *         NULL si el pool esta agotado. No hay Destroy.
+  */
+Kalman_HandleTypeDef *Kalman_Create(void);
 
 /**
   * @brief  Inicializa el filtro.
@@ -35,18 +32,24 @@ typedef struct {
   * @param  r   varianza de medicion (HC-SR04 ~ (0.3 cm)^2 ~ 0.09)
   * @param  x0  posicion inicial estimada
   */
-void  Kalman_Init(Kalman_t *kf, float dt, float q, float r, float x0);
+void  Kalman_Init(Kalman_HandleTypeDef *kf, float dt, float q, float r, float x0);
 
 /**
   * @brief  Un ciclo predict + update con la medicion z. Devuelve la posicion
-  *         estimada (x0).
+  *         estimada.
   */
-float Kalman_Update(Kalman_t *kf, float z);
+float Kalman_Update(Kalman_HandleTypeDef *kf, float z);
+
+/**
+  * @brief  Velocidad estimada [cm/s] del ultimo update (positiva si la posicion
+  *         crece). Es la entrada del termino derivativo del PID.
+  */
+float Kalman_GetVelocity(const Kalman_HandleTypeDef *kf);
 
 /**
   * @brief  Reinicia el estado a x0 (velocidad 0) y la covarianza.
   */
-void  Kalman_Reset(Kalman_t *kf, float x0);
+void  Kalman_Reset(Kalman_HandleTypeDef *kf, float x0);
 
 #ifdef __cplusplus
 }

@@ -1,40 +1,28 @@
 /**
   ******************************************************************************
   * @file    task_motor.c
-  * @brief   Task del actuador (prio 4). Recibe el angulo de QueueAngulo y lo
+  * @brief   Task del actuador (prio 4). Recibe el angulo de queue_angulo y lo
   *          aplica al servo, con toggle de LD2 (PA5) como heartbeat del lazo.
   *
   *          Habla SOLO en grados: los microsegundos son asunto del driver. El
   *          recorte contra los topes fisicos tampoco se hace aca, sino en el
   *          driver via Servo_SetTravel(), asi vale para cualquier llamador.
+  *
+  *          El servo ya viene creado, inicializado, con el recorrido declarado
+  *          y nivelado desde App_Init; la task solo recibe el contexto y corre.
   ******************************************************************************
   */
 
 #include "task_motor.h"
-#include "app.h"
 #include "app_config.h"
 
 #include "FreeRTOS.h"
 #include "task.h"
 #include "queue.h"
-#include "tim.h"        /* htim3 */
 
 void MotorTask(void *argument)
 {
-  (void)argument;
-
-  /* Servo_Init arranca el PWM; Servo_SetTravel declara la guarda contra los
-   * topes, que es lo unico que la aplicacion decide sobre el recorrido. Si
-   * alguna de las dos falla, el servo quedaria sin limite: no se sigue. */
-  TimerChannel_t pwm = { &htim3, TIM_CHANNEL_1 };
-  Servo_Status st = Servo_Init(&g_servo, pwm);
-  if (st == SERVO_OK)
-  {
-    st = Servo_SetTravel(&g_servo, SERVO_MIN_DEG, SERVO_MAX_DEG);
-  }
-  if (st != SERVO_OK) { Error_Handler(); }
-
-  Servo_SetAngle(&g_servo, SERVO_LEVEL_DEG);   /* arrancar con la barra nivelada */
+  TaskMotorContext *context = (TaskMotorContext *)argument;
 
   /* Estado del failsafe: se actua SOLO en el flanco, para nivelar una vez al
    * perder la pelota en vez de reescribir el mismo angulo en cada timeout. */
@@ -43,10 +31,10 @@ void MotorTask(void *argument)
   for (;;)
   {
     float angle = 0.0f;
-    if (xQueueReceive(QueueAngulo, &angle, pdMS_TO_TICKS(APP_MOTOR_TIMEOUT_MS)) == pdTRUE)
+    if (xQueueReceive(context->queue_angulo, &angle, pdMS_TO_TICKS(APP_MOTOR_TIMEOUT_MS)) == pdTRUE)
     {
       perdida = 0u;
-      Servo_SetAngle(&g_servo, angle);
+      Servo_SetAngle(context->servo, angle);
       HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);   /* heartbeat del lazo */
     }
     else if (!perdida)
@@ -60,7 +48,7 @@ void MotorTask(void *argument)
        * integra cuando LLEGA una posicion, asi que mientras el sensor no
        * entregue queda congelado en vez de acumular. */
       perdida = 1u;
-      Servo_SetAngle(&g_servo, SERVO_LEVEL_DEG);
+      Servo_SetAngle(context->servo, SERVO_LEVEL_DEG);
     }
   }
 }

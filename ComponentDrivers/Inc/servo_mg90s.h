@@ -30,12 +30,13 @@ typedef enum {
     SERVO_ERROR
 } Servo_Status;
 
-typedef struct {
-    TIM_HandleTypeDef *htim;     /* timer en modo PWM                        */
-    uint32_t           channel;  /* TIM_CHANNEL_1..4                         */
-    float              min_deg;  /* recorrido permitido: piso (ver SetTravel) */
-    float              max_deg;  /* recorrido permitido: techo               */
-} Servo_HandleTypeDef;
+typedef struct Servo Servo_HandleTypeDef;
+
+/**
+  * @brief  Reserva un handle de un pool estatico interno (sin malloc). Devuelve
+  *         NULL si el pool esta agotado. No hay Destroy.
+  */
+Servo_HandleTypeDef *Servo_Create(void);
 
 /**
   * @brief  Inicializa el servo y arranca la generacion PWM. Recorrido inicial:

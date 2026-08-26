@@ -8,7 +8,35 @@
 
 #include "pid.h"
 
-void PID_Init(PID_t *pid, float kp, float ki, float kd, float dt)
+/* Definicion del struct opaco (oculta a los usuarios del .h). */
+struct PID {
+    float kp, ki, kd;     /* ganancias                                        */
+    float dt;             /* paso de tiempo [s]                               */
+    float out_min;        /* saturacion inferior de la salida                 */
+    float out_max;        /* saturacion superior de la salida                 */
+    float integ;          /* termino integral acumulado                       */
+    float i_band;         /* solo integra con |err| <= i_band (0 = siempre)   */
+    float prev_meas;      /* medicion anterior (derivada por diferencia)      */
+    float prev_err;       /* error anterior (deteccion de cruce por cero)     */
+    int   first;          /* 1 = primer Compute (evita el spike derivativo)   */
+    int   anti_windup;    /* 1 = clamping condicional del integrador          */
+};
+
+/* Pool estatico de handles: el driver es dueno de la memoria (sin malloc). */
+#ifndef PID_MAX_INSTANCES
+#define PID_MAX_INSTANCES  1
+#endif
+
+static struct PID s_pool[PID_MAX_INSTANCES];
+static unsigned   s_pool_count = 0u;
+
+PID_HandleTypeDef *PID_Create(void)
+{
+    if (s_pool_count >= PID_MAX_INSTANCES) { return 0; }
+    return &s_pool[s_pool_count++];
+}
+
+void PID_Init(PID_HandleTypeDef *pid, float kp, float ki, float kd, float dt)
 {
     if (pid == 0) { return; }
     pid->kp = kp;
@@ -25,20 +53,20 @@ void PID_Init(PID_t *pid, float kp, float ki, float kd, float dt)
     pid->anti_windup = 1;
 }
 
-void PID_SetLimits(PID_t *pid, float out_min, float out_max)
+void PID_SetLimits(PID_HandleTypeDef *pid, float out_min, float out_max)
 {
     if (pid == 0) { return; }
     pid->out_min = out_min;
     pid->out_max = out_max;
 }
 
-void PID_SetIntegralBand(PID_t *pid, float band)
+void PID_SetIntegralBand(PID_HandleTypeDef *pid, float band)
 {
     if (pid == 0) { return; }
     pid->i_band = band;
 }
 
-void PID_Reset(PID_t *pid)
+void PID_Reset(PID_HandleTypeDef *pid)
 {
     if (pid == 0) { return; }
     pid->integ = 0.0f;
@@ -47,7 +75,7 @@ void PID_Reset(PID_t *pid)
     pid->first = 1;
 }
 
-float PID_Compute(PID_t *pid, float setpoint, float meas)
+float PID_Compute(PID_HandleTypeDef *pid, float setpoint, float meas)
 {
     if (pid == 0) { return 0.0f; }
 
@@ -61,7 +89,7 @@ float PID_Compute(PID_t *pid, float setpoint, float meas)
     return PID_ComputeRate(pid, setpoint, meas, rate);
 }
 
-float PID_ComputeRate(PID_t *pid, float setpoint, float meas, float rate)
+float PID_ComputeRate(PID_HandleTypeDef *pid, float setpoint, float meas, float rate)
 {
     if (pid == 0) { return 0.0f; }
 
