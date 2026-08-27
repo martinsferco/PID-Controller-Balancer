@@ -94,9 +94,12 @@
 /* Periodo de lectura del pote: es una mano girando, no hace falta mas rapido. */
 #define POT_PERIOD_MS           200u
 
-/* Failsafe del actuador: sin angulo nuevo por este tiempo, MotorTask nivela la
- * barra (5 muestras perdidas del lazo de 100 ms). */
-#define APP_MOTOR_TIMEOUT_MS    500u
+/* Timeout de "sin dato nuevo" de cada task del lazo: 5 muestras perdidas del
+ * lazo de 100 ms. Un define por task (aunque hoy coincidan en el valor) para
+ * poder ajustarlos por separado el dia que dejen de coincidir. */
+#define MOTOR_TASK_TIMEOUT_MS   500u    /* MotorTask: nivela la barra              */
+#define KALMAN_TASK_TIMEOUT_MS  500u    /* KalmanTask: se re-arma para Kalman_Reset */
+#define PID_TASK_TIMEOUT_MS     500u    /* PidTask: sigue esperando, sin resetear   */
 
 /* ==================== Coherencia entre el lazo y el servo =================
  * El lazo comanda SERVO_CENTER_DEG + SERVO_DIR * u y Servo_SetAngle() satura en

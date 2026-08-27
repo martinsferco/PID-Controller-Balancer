@@ -20,6 +20,7 @@
 
 #include "task_kalman.h"
 #include "app.h"          /* PosFil_t */
+#include "app_config.h"
 
 #include "FreeRTOS.h"
 #include "task.h"
@@ -34,15 +35,25 @@ void KalmanTask(void *argument)
   for (;;)
   {
     float z = 0.0f;
-    if (xQueueReceive(context->queue_pos, &z, portMAX_DELAY) == pdTRUE)
+    if (xQueueReceive(context->queue_pos, &z, pdMS_TO_TICKS(KALMAN_TASK_TIMEOUT_MS)) == pdTRUE)
     {
-      /* Arrancar el filtro en la primera muestra real, no en 0 cm. */
+      /* Arrancar (o re-arrancar tras un corte largo) el filtro con la muestra
+       * real, no seguir de donde quedo: Kalman_Update asume que paso un
+       * KALMAN_DT desde la muestra anterior, y tras un timeout eso es falso,
+       * asi que seguir sin resetear meteria una velocidad espuria. */
       if (!inicializado) { Kalman_Reset(context->kalman, z); inicializado = 1; }
 
       PosFil_t est;
       est.pos = Kalman_Update(context->kalman, z);        /* posicion estimada */
       est.vel = Kalman_GetVelocity(context->kalman);      /* vel del MISMO update */
       xQueueOverwrite(context->queue_pos_fil, &est);
+    }
+    else
+    {
+      /* Sin dato nuevo por KALMAN_TASK_TIMEOUT_MS: el sensor esta caido. Se pide
+       * un reset para la proxima muestra real en vez de filtrarla como si
+       * hubiera llegado a los 100 ms de la anterior. */
+      inicializado = 0;
     }
   }
 }

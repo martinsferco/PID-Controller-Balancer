@@ -37,7 +37,11 @@ void PidTask(void *argument)
 
   for (;;)
   {
-    QueueSetMemberHandle_t quien = xQueueSelectFromSet(context->queue_set, portMAX_DELAY);
+    /* Timeout en vez de portMAX_DELAY: si vence (sensor Y pote sin publicar a
+     * la vez), quien queda NULL, no matchea ninguna rama de abajo y el loop
+     * sigue sin hacer nada -- el integrador del PID se deja congelado a
+     * proposito (ver comentario de MotorTask), no se resetea aca. */
+    QueueSetMemberHandle_t quien = xQueueSelectFromSet(context->queue_set, pdMS_TO_TICKS(PID_TASK_TIMEOUT_MS));
 
     /* Se lee con timeout 0: con xQueueOverwrite sobre miembros de un set puede
      * quedar algun aviso sin dato detras. Un setpoint nuevo solo refresca la
