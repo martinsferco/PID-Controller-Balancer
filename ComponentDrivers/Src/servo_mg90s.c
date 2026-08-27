@@ -34,7 +34,7 @@ static unsigned     s_pool_count = 0u;
 
 Servo_HandleTypeDef *Servo_Create(void)
 {
-    if (s_pool_count >= SERVO_MAX_INSTANCES) { return 0; }
+    if (s_pool_count >= SERVO_MAX_INSTANCES) { return NULL; }
     return &s_pool[s_pool_count++];
 }
 

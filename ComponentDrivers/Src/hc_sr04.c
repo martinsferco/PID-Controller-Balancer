@@ -61,7 +61,7 @@ struct HC_SR04_Handle {
 
 /* Registro interno de instancias para el dispatch del callback global del HAL. */
 #ifndef HC_SR04_MAX_INSTANCES
-#define HC_SR04_MAX_INSTANCES  4
+#define HC_SR04_MAX_INSTANCES  1
 #endif
 
 static HC_SR04_HandleTypeDef *s_instances[HC_SR04_MAX_INSTANCES] = {0};
@@ -74,7 +74,7 @@ static unsigned              s_pool_count = 0u;
 
 HC_SR04_HandleTypeDef *HC_SR04_Create(void)
 {
-    if (s_pool_count >= HC_SR04_MAX_INSTANCES) { return 0; }
+    if (s_pool_count >= HC_SR04_MAX_INSTANCES) { return NULL; }
     return &s_pool[s_pool_count++];
 }
 

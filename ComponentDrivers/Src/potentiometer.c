@@ -28,7 +28,7 @@ static unsigned             s_pool_count = 0u;
 
 Potentiometer_HandleTypeDef *Potentiometer_Create(void)
 {
-    if (s_pool_count >= POTENTIOMETER_MAX_INSTANCES) { return 0; }
+    if (s_pool_count >= POTENTIOMETER_MAX_INSTANCES) { return NULL; }
     return &s_pool[s_pool_count++];
 }
 
