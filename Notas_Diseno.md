@@ -101,10 +101,16 @@ En grados de horn medidos desde la horizontal.
 - Stacks en **words** (no bytes). Prioridad mayor = más urgente.
 - `POT_PERIOD_MS = 200`: período de lectura del pote. Es una mano girando, no hace falta más
   rápido.
-- `APP_MOTOR_TIMEOUT_MS = 500`: failsafe del actuador. Tiempo sin ángulo nuevo tras el cual
-  `MotorTask` nivela la barra. Si el sensor deja de ver la pelota, dejar el servo clavado en la
-  última inclinación es la peor posición posible para que vuelva. El lazo publica cada 100 ms,
-  así que esto son 5 muestras perdidas.
+- Timeout de "sin dato nuevo" de `MotorTask`, `KalmanTask` y `PidTask`: un define por task
+  (`MOTOR_TASK_TIMEOUT_MS`, `KALMAN_TASK_TIMEOUT_MS`, `PID_TASK_TIMEOUT_MS`), hoy los tres en 500 ms
+  para poder ajustarlos por separado el día que dejen de coincidir. El lazo publica cada 100 ms, así
+  que esto son 5 muestras perdidas. Cada task reacciona distinto al vencerlo:
+  - `MotorTask`: nivela la barra. Si el sensor deja de ver la pelota, dejar el servo clavado en la
+    última inclinación es la peor posición posible para que vuelva.
+  - `KalmanTask`: se marca como no inicializada, para forzar un `Kalman_Reset` con la próxima
+    muestra real en vez de filtrarla asumiendo que pasó un `KALMAN_DT` desde la anterior.
+  - `PidTask`: no hace nada especial — el integrador queda congelado a propósito (ver punto
+    anterior de `MotorTask`), no se resetea.
 
 ---
 

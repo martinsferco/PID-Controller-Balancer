@@ -31,7 +31,7 @@ void MotorTask(void *argument)
   for (;;)
   {
     float angle = 0.0f;
-    if (xQueueReceive(context->queue_angulo, &angle, pdMS_TO_TICKS(APP_MOTOR_TIMEOUT_MS)) == pdTRUE)
+    if (xQueueReceive(context->queue_angulo, &angle, pdMS_TO_TICKS(MOTOR_TASK_TIMEOUT_MS)) == pdTRUE)
     {
       perdida = 0u;
       Servo_SetAngle(context->servo, angle);
@@ -39,7 +39,7 @@ void MotorTask(void *argument)
     }
     else if (!perdida)
     {
-      /* FAILSAFE: pasaron APP_MOTOR_TIMEOUT_MS sin angulo nuevo, o sea que el
+      /* FAILSAFE: pasaron MOTOR_TASK_TIMEOUT_MS sin angulo nuevo, o sea que el
        * sensor dejo de ver la pelota. Sin esto el servo se quedaria clavado en
        * la ultima inclinacion, que es la peor posicion posible para que la
        * pelota vuelva. Nivelar es lo unico razonable sin medicion.
