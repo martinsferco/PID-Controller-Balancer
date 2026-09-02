@@ -12,6 +12,13 @@
   *            - Los contextos por task -> `static` locales de App_Init: duracion
   *              estatica (sobreviven al return) pero solo App_Init los ve.
   *          No se usan objetos locales de main(): el scheduler pisa ese stack.
+  *
+  *          Semaforos, colas y tasks se crean con las *Static de FreeRTOS (sin
+  *          heap): cada handle lleva su StaticQueue_t/StaticSemaphore_t/
+  *          StaticTask_t + storage/stack como `static` local. Unica excepcion:
+  *          el queue set del PID (`xQueueCreateSet`), que esta version de
+  *          FreeRTOS solo compila con configSUPPORT_DYNAMIC_ALLOCATION==1 (no
+  *          existe variante static); por eso el heap sigue habilitado.
   ******************************************************************************
   */
 
@@ -63,16 +70,31 @@ void App_OnTimerTick_FromISR(void)
 
 void App_Init(void)
 {
-  /* --- Semaforos binarios (file-scope: los usan los hooks) --- */
-  SemTimer  = xSemaphoreCreateBinary();
-  SemSensor = xSemaphoreCreateBinary();
+  /* --- Semaforos binarios (file-scope: los usan los hooks) ---
+   * *Static: el control block es solo para la creacion, no hace falta que lo
+   * vea el hook, asi que puede ser static local (igual que los contextos). */
+  static StaticSemaphore_t s_sem_timer_cb;
+  static StaticSemaphore_t s_sem_sensor_cb;
+  SemTimer  = xSemaphoreCreateBinaryStatic(&s_sem_timer_cb);
+  SemSensor = xSemaphoreCreateBinaryStatic(&s_sem_sensor_cb);
   if (SemTimer == NULL || SemSensor == NULL) { Error_Handler(); }
 
-  /* --- Colas de profundidad 1 (sus handles se guardan en los contextos) --- */
-  QueueHandle_t QueuePos      = xQueueCreate(1, sizeof(float));
-  QueueHandle_t QueuePosFil   = xQueueCreate(1, sizeof(PosFil_t));
-  QueueHandle_t QueueObjetivo = xQueueCreate(1, sizeof(float));
-  QueueHandle_t QueueAngulo   = xQueueCreate(1, sizeof(float));
+  /* --- Colas de profundidad 1 (sus handles se guardan en los contextos) ---
+   * *Static: el storage y el control block deben durar tanto como la cola,
+   * por eso static (no automatico), aunque solo App_Init los referencia. */
+  static StaticQueue_t s_queue_pos_cb;
+  static uint8_t       s_queue_pos_storage[1 * sizeof(float)];
+  static StaticQueue_t s_queue_pos_fil_cb;
+  static uint8_t       s_queue_pos_fil_storage[1 * sizeof(PosFil_t)];
+  static StaticQueue_t s_queue_objetivo_cb;
+  static uint8_t       s_queue_objetivo_storage[1 * sizeof(float)];
+  static StaticQueue_t s_queue_angulo_cb;
+  static uint8_t       s_queue_angulo_storage[1 * sizeof(float)];
+
+  QueueHandle_t QueuePos      = xQueueCreateStatic(1, sizeof(float), s_queue_pos_storage, &s_queue_pos_cb);
+  QueueHandle_t QueuePosFil   = xQueueCreateStatic(1, sizeof(PosFil_t), s_queue_pos_fil_storage, &s_queue_pos_fil_cb);
+  QueueHandle_t QueueObjetivo = xQueueCreateStatic(1, sizeof(float), s_queue_objetivo_storage, &s_queue_objetivo_cb);
+  QueueHandle_t QueueAngulo   = xQueueCreateStatic(1, sizeof(float), s_queue_angulo_storage, &s_queue_angulo_cb);
   if (QueuePos == NULL || QueuePosFil == NULL ||
       QueueObjetivo == NULL || QueueAngulo == NULL) { Error_Handler(); }
 
@@ -83,7 +105,12 @@ void App_Init(void)
    * leer, asi que los avisos pendientes pueden superar la cantidad de datos. Si
    * el contenedor se llena, FreeRTOS pega en un configASSERT, que en este
    * proyecto es taskDISABLE_INTERRUPTS() + for(;;): un cuelgue mudo. Dos slots
-   * de mas cuestan 16 bytes. */
+   * de mas cuestan 16 bytes.
+   *
+   * Sin variante *Static: xQueueCreateSet() esta compilado solo bajo
+   * configSUPPORT_DYNAMIC_ALLOCATION==1 en esta version de FreeRTOS (no existe
+   * xQueueCreateSetStatic). Es la unica asignacion dinamica que queda en todo
+   * el proyecto; por eso el heap sigue habilitado en FreeRTOSConfig.h. */
   QueueSetHandle_t QueueSetPid = xQueueCreateSet(4);
   if (QueueSetPid == NULL) { Error_Handler(); }
   if (xQueueAddToSet(QueuePosFil,   QueueSetPid) != pdPASS) { Error_Handler(); }
@@ -156,10 +183,23 @@ void App_Init(void)
   pot_ctx.pot            = pot;
   pot_ctx.queue_objetivo = QueueObjetivo;
 
-  /* --- Tasks (una por archivo, prioridades en app_config.h) --- */
-  if (xTaskCreate(SensorTask, "Sensor", SENSOR_TASK_STACK, &sensor_ctx, SENSOR_TASK_PRIO, NULL) != pdPASS) { Error_Handler(); }
-  if (xTaskCreate(KalmanTask, "Kalman", KALMAN_TASK_STACK, &kalman_ctx, KALMAN_TASK_PRIO, NULL) != pdPASS) { Error_Handler(); }
-  if (xTaskCreate(PidTask,    "Pid",    PID_TASK_STACK,    &pid_ctx,    PID_TASK_PRIO,    NULL) != pdPASS) { Error_Handler(); }
-  if (xTaskCreate(MotorTask,  "Motor",  MOTOR_TASK_STACK,  &motor_ctx,  MOTOR_TASK_PRIO,  NULL) != pdPASS) { Error_Handler(); }
-  if (xTaskCreate(PotTask,    "Pot",    POT_TASK_STACK,    &pot_ctx,    POT_TASK_PRIO,    NULL) != pdPASS) { Error_Handler(); }
+  /* --- Tasks (una por archivo, prioridades en app_config.h) ---
+   * *Static: TCB y stack de cada task, static locales por la misma razon que
+   * las colas de arriba. */
+  static StaticTask_t s_sensor_tcb;
+  static StackType_t  s_sensor_stack[SENSOR_TASK_STACK];
+  static StaticTask_t s_kalman_tcb;
+  static StackType_t  s_kalman_stack[KALMAN_TASK_STACK];
+  static StaticTask_t s_pid_tcb;
+  static StackType_t  s_pid_stack[PID_TASK_STACK];
+  static StaticTask_t s_motor_tcb;
+  static StackType_t  s_motor_stack[MOTOR_TASK_STACK];
+  static StaticTask_t s_pot_tcb;
+  static StackType_t  s_pot_stack[POT_TASK_STACK];
+
+  if (xTaskCreateStatic(SensorTask, "Sensor", SENSOR_TASK_STACK, &sensor_ctx, SENSOR_TASK_PRIO, s_sensor_stack, &s_sensor_tcb) == NULL) { Error_Handler(); }
+  if (xTaskCreateStatic(KalmanTask, "Kalman", KALMAN_TASK_STACK, &kalman_ctx, KALMAN_TASK_PRIO, s_kalman_stack, &s_kalman_tcb) == NULL) { Error_Handler(); }
+  if (xTaskCreateStatic(PidTask,    "Pid",    PID_TASK_STACK,    &pid_ctx,    PID_TASK_PRIO,    s_pid_stack,    &s_pid_tcb)    == NULL) { Error_Handler(); }
+  if (xTaskCreateStatic(MotorTask,  "Motor",  MOTOR_TASK_STACK,  &motor_ctx,  MOTOR_TASK_PRIO,  s_motor_stack,  &s_motor_tcb)  == NULL) { Error_Handler(); }
+  if (xTaskCreateStatic(PotTask,    "Pot",    POT_TASK_STACK,    &pot_ctx,    POT_TASK_PRIO,    s_pot_stack,    &s_pot_tcb)    == NULL) { Error_Handler(); }
 }
