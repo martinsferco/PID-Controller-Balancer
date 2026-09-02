@@ -110,7 +110,16 @@ void App_Init(void)
    * Sin variante *Static: xQueueCreateSet() esta compilado solo bajo
    * configSUPPORT_DYNAMIC_ALLOCATION==1 en esta version de FreeRTOS (no existe
    * xQueueCreateSetStatic). Es la unica asignacion dinamica que queda en todo
-   * el proyecto; por eso el heap sigue habilitado en FreeRTOSConfig.h. */
+   * el proyecto; por eso el heap sigue habilitado en FreeRTOSConfig.h.
+   *
+   * Alternativa que se evaluo y no se uso: reemplazar este queue set por
+   * notificaciones de tarea (xTaskNotify con eSetBits en cada productor,
+   * xTaskNotifyWait en PidTask). Un bit no tiene "profundidad" -- prender un
+   * bit ya prendido no desborda nada, asi que se saca de encima el riesgo del
+   * configASSERT de arriba sin depender de un margen empirico, y de paso esta
+   * asignacion dinamica dejaria de existir. Se prefirio quedarse con colas
+   * (IPC uniforme en todo el proyecto) y aceptar el margen; queda anotado por
+   * si el desborde llegara a darse en la practica. */
   QueueSetHandle_t QueueSetPid = xQueueCreateSet(4);
   if (QueueSetPid == NULL) { Error_Handler(); }
   if (xQueueAddToSet(QueuePosFil,   QueueSetPid) != pdPASS) { Error_Handler(); }
