@@ -63,13 +63,6 @@ Servo_Status Servo_SetTravel(Servo_HandleTypeDef *s,
   */
 Servo_Status Servo_SetAngle(Servo_HandleTypeDef *s, float deg);
 
-/**
-  * @brief  Ancho de pulso que esta saliendo por el pin, en us. Solo para
-  *         diagnostico: es lo que distingue "el firmware no manda" de "el
-  *         firmware manda y el servo no responde".
-  */
-Servo_Status Servo_GetPulseUs(const Servo_HandleTypeDef *s, uint16_t *us);
-
 #ifdef __cplusplus
 }
 #endif

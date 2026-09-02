@@ -120,12 +120,3 @@ Servo_Status Servo_SetAngle(Servo_HandleTypeDef *s, float deg)
                           servo_us_from_deg(servo_limit_deg(s, deg)));
     return SERVO_OK;
 }
-
-Servo_Status Servo_GetPulseUs(const Servo_HandleTypeDef *s, uint16_t *us)
-{
-    if (s == NULL || us == NULL) {
-        return SERVO_ERROR;
-    }
-    *us = (uint16_t)__HAL_TIM_GET_COMPARE(s->htim, s->channel);
-    return SERVO_OK;
-}
