@@ -12,26 +12,56 @@ de cada número vive acá.
 Largo útil de la barra, medido **desde la cara del sensor**.
 
 ### Sensor HC-SR04 (`SENSOR_MIN_CM`, `SENSOR_MAX_CM`, `SENSOR_ECHO_TIMEOUT_MS`)
-- `SENSOR_MIN_CM = 3.0`: zona muerta real del sensor.
-- `SENSOR_MAX_CM = 32.0`: barra de 30 cm + margen.
+Todo el lazo (sensor, Kalman, PID, setpoint del pote) trabaja en la misma referencia: el
+**borde** del carro que encara al sensor, que es justo lo que mide el HC-SR04 — así
+`task_sensor.c` publica la lectura cruda en `queue_pos` sin convertir nada, y
+`POTENTIOMETER_MIN_CM/MAX_CM` son directamente `SENSOR_MIN_CM`/`SENSOR_MAX_CM`.
+
+- `HC_SR04_HW_MIN_CM = 2.0` (vive en `hc_sr04.h`, no acá): zona muerta real del componente,
+  hecho del datasheet. Es del driver y no de la app porque otro sensor de distancia sería otro
+  módulo con otro límite; `app_config.h` la referencia en vez de duplicarla.
+- `SENSOR_SAFETY_MARGIN_CM = 1.0`: headroom de la app sobre esa zona muerta. **No es lo mismo**
+  "el sensor no detecta por debajo de X" que "el sensor detecta de forma confiable en X": pegado
+  al límite exacto la lectura se vuelve poco confiable (eco débil o ausente por efecto de campo
+  cercano), y ya vimos ese caso concreto (commit `d4d49a4`): con el carro pegado al sensor el
+  ECHO se cuelga en alto hasta su timeout interno y el driver lo convierte en una distancia
+  enorme. Si el problema reaparece en banco, subir este margen (no `HC_SR04_HW_MIN_CM`, que es
+  un hecho del componente, no un parámetro de ajuste de la app).
+- `SENSOR_MIN_CM = HC_SR04_HW_MIN_CM + SENSOR_SAFETY_MARGIN_CM = 3.0`: esto es lo que realmente
+  se le pide al carro que respete.
+- `SENSOR_MAX_CM = 20.5`: borde máximo, medido directamente con el carro apoyado contra su tope
+  mecánico (choca contra el motor antes de llegar a `BEAM_LENGTH_CM`). Es una medida física
+  directa, no una derivación — no hace falta descomponerla en offset al centro del carro más
+  margen al motor para poder tomarla.
 - `SENSOR_ECHO_TIMEOUT_MS = 80`: guarda del `xSemaphoreTake` del echo en la task. Tiene que
   ser **menor que el período** del tick del sensor (100 ms) y **mayor que el timeout interno**
   del driver. Es un timeout de *scheduling*, distinto del timeout de hardware del driver.
 
 ### Banda de gracia en los bordes (`SENSOR_EDGE_GRACE_CM = 3.0`)
 Una medición que cae fuera de `[SENSOR_MIN_CM, SENSOR_MAX_CM]` pero a menos de esto del borde
-se recorta y se usa igual, porque significa que la pelota está en la punta de la barra o pegada
+se recorta y se usa igual, porque significa que el carro está en la punta de la barra o pegado
 al sensor. Más lejos se descarta: eso ya es un eco del ambiente, y usarlo haría inclinar la
-barra por una pelota que no está ahí. Por eso la banda tiene que ser chica.
+barra por un carro que no está ahí. Por eso la banda tiene que ser chica.
 
-### Potenciómetro / setpoint (`POTENTIOMETER_MIN_CM = 5.0`, `POTENTIOMETER_MAX_CM = 25.0`)
-Rango de setpoint que barre el pote de tope a tope. **No** es `0..BEAM_LENGTH_CM` porque ninguno
-de esos dos extremos es alcanzable: por abajo el sensor no ve nada antes de `SENSOR_MIN_CM`, y
-por arriba la pelota se cae de la punta. Pedir un setpoint inalcanzable deja al proporcional
-inclinando para siempre contra un tope.
+### Potenciómetro / setpoint (`POTENTIOMETER_MIN_CM`, `POTENTIOMETER_MAX_CM`)
+Rango de setpoint que barre el pote de tope a tope, en la misma referencia que publica
+`task_sensor.c` (borde del carro que encara al sensor) — por eso son directamente el mismo
+rango que ve el sensor, sin ningún offset:
 
-`SETPOINT_DEFAULT_CM = BEAM_LENGTH_CM * 0.5`: setpoint por defecto hasta que `PotTask` publique
-su primera lectura.
+- `POTENTIOMETER_MIN_CM = SENSOR_MIN_CM = 3.0`
+- `POTENTIOMETER_MAX_CM = SENSOR_MAX_CM = 20.5`
+
+**No** es `0..BEAM_LENGTH_CM` porque ninguno de esos dos extremos es alcanzable: por abajo el
+sensor no ve nada antes de `SENSOR_MIN_CM`, y por arriba el carro choca contra el motor. Pedir
+un setpoint inalcanzable deja al proporcional inclinando para siempre contra un tope.
+
+`task_pid.c` compara este setpoint directamente contra `est.pos` (la posición que entrega
+Kalman filtrando `queue_pos`): como ambos están en la misma referencia de borde, no hace falta
+convertir nada en el lazo de control.
+
+`SETPOINT_DEFAULT_CM = (POTENTIOMETER_MIN_CM + POTENTIOMETER_MAX_CM) * 0.5 = 11.75`: setpoint
+por defecto hasta que `PotTask` publique su primera lectura, punto medio del rango de borde
+realmente alcanzable.
 
 ### Servo MG90S (`SERVO_MIN_DEG`, `SERVO_MAX_DEG`, `SERVO_LEVEL_DEG`)
 La recta grados ↔ µs vive en el driver (`servo_mg90s.h`): un MG90S recorre 0..180° entre 500 y

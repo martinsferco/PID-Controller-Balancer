@@ -53,10 +53,10 @@ struct HC_SR04_Handle {
 /* Limites FISICOS del HC-SR04 (datasheet): NO son configurables. El driver ES
  * el HC-SR04, asi que su rango es un hecho del componente. Otro sensor de
  * distancia = otro modulo. Fuera de estos limites el eco es imposible y la
- * lectura se marca INVALID. La ventana util de la barra (recorte a la zona de
- * la pelota) es politica de la aplicacion y vive en task_sensor. */
-#define HC_SR04_HW_MIN_CM      2.0f
-#define HC_SR04_HW_MAX_CM      450.0f
+ * lectura se marca INVALID. La ventana util de la barra (recorte a la zona
+ * del carro) es politica de la aplicacion y vive en task_sensor.
+ * HC_SR04_HW_MIN_CM y HC_SR04_HW_MAX_CM viven en hc_sr04.h, publicas para que
+ * la app pueda derivar sus propios rangos sin duplicar el dato del datasheet. */
 #define HC_SR04_HW_TIMEOUT_MS  30u    /* eco maximo ~25 ms + margen */
 
 /* Registro interno de instancias para el dispatch del callback global del HAL. */

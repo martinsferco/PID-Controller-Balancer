@@ -3,12 +3,14 @@
   * @file    task_sensor.c
   * @brief   Task del sensor (prio 5). Se despierta con sem_timer (tick de 100 ms
   *          de TIM4), dispara el HC-SR04, espera el echo (sem_sensor) y publica
-  *          la distancia cruda en queue_pos.
+  *          la distancia cruda (borde del carro que encara al sensor) en
+  *          queue_pos. Kalman, PID y el setpoint del pote trabajan todos en
+  *          esa misma referencia.
   *
   *          Politica: medir siempre que sea posible, nunca descartar en
   *          silencio. Una lectura que cae fuera de la ventana util pero a
-  *          menos de SENSOR_EDGE_GRACE_CM del borde se recorta al borde (la
-  *          pelota esta en la punta de la barra o en la zona muerta del
+  *          menos de SENSOR_EDGE_GRACE_CM del borde se recorta al borde (el
+  *          carro esta en la punta de la barra o en la zona muerta del
   *          sensor). Una lectura MUY fuera de rango es el eco fantasma de la
   *          zona ciega del HC-SR04 (por debajo de ~2 cm el modulo no recibe
   *          rebote real y el ECHO se queda en alto hasta su propio timeout
@@ -72,13 +74,13 @@ void SensorTask(void *argument)
 
       if (dist < SENSOR_MIN_CM)
       {
-        /* Por debajo del borde inferior (con o sin gracia): la pelota esta
-         * pegada al sensor o en su zona muerta. */
+        /* Por debajo del borde inferior (con o sin gracia): el carro esta
+         * pegado al sensor o en su zona muerta. */
         borde = SENSOR_MIN_CM;
       }
       else if (dist < (SENSOR_MAX_CM + SENSOR_EDGE_GRACE_CM))
       {
-        /* A un pelo del borde superior: la pelota esta en la punta de la
+        /* A un pelo del borde superior: el carro esta en la punta de la
          * barra. */
         borde = SENSOR_MAX_CM;
       }
@@ -87,7 +89,7 @@ void SensorTask(void *argument)
         /* Muy por encima del borde superior: no es un objeto lejano (la
          * barra esta encerrada, no puede rebotar en el ambiente) sino el eco
          * fantasma de la zona ciega. Misma conclusion que el primer caso:
-         * pelota pegada al sensor. */
+         * carro pegado al sensor. */
         borde = SENSOR_MIN_CM;
       }
 
