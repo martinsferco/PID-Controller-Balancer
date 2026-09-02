@@ -13,29 +13,44 @@
 #ifndef APP_CONFIG_H
 #define APP_CONFIG_H
 
+#include "hc_sr04.h"    /* HC_SR04_HW_MIN_CM: limite fisico del sensor */
+
 /* ============================= Montaje fisico ============================= */
 
 /* Largo util de la barra, medido desde la cara del sensor. */
 #define BEAM_LENGTH_CM          30.0f
 
-/* --- Sensor HC-SR04 (posicion de la pelota) ------------------------------- */
-#define SENSOR_MIN_CM           3.0f    /* zona muerta real del sensor          */
-#define SENSOR_MAX_CM           32.0f   /* barra de 30 cm + margen              */
+/* --- Sensor HC-SR04 (posicion del borde del carro que encara al sensor) --- */
+/* HC_SR04_HW_MIN_CM (hc_sr04.h) es la zona muerta real del componente: por
+ * debajo de eso directamente no hay eco. SENSOR_SAFETY_MARGIN_CM es el
+ * margen de seguridad de la app por encima de ese piso: pegado al limite
+ * exacto la lectura deja de ser confiable (eco debil/ausente por campo
+ * cercano), y el sensor deja de responder si se le pide operar justo ahi.
+ * SENSOR_MIN_CM es lo que realmente se le pide al carro que respete. */
+#define SENSOR_SAFETY_MARGIN_CM 1.0f
+#define SENSOR_MIN_CM           (HC_SR04_HW_MIN_CM + SENSOR_SAFETY_MARGIN_CM)
+
+/* Borde maximo medido con el carro apoyado contra su tope mecanico (choca
+ * contra el motor antes de llegar a BEAM_LENGTH_CM). Se mide directamente
+ * con el carro en ese limite, no se deduce de la geometria del carro. */
+#define SENSOR_MAX_CM           20.5f
 #define SENSOR_ECHO_TIMEOUT_MS  80u     /* guarda: < periodo, > timeout interno */
 
 /* Banda de gracia en los bordes: una lectura fuera de la ventana util pero a
- * menos de esto del borde se recorta y se usa (pelota en la punta o pegada al
+ * menos de esto del borde se recorta y se usa (carro en la punta o pegado al
  * sensor); mas lejos es eco del ambiente y se descarta. */
-#define SENSOR_EDGE_GRACE_CM    3.0f
+#define SENSOR_EDGE_GRACE_CM    5.0f
 
-/* --- Potenciometro (setpoint) --------------------------------------------- */
-/* Rango de setpoint que barre el pote de tope a tope (no es 0..BEAM_LENGTH_CM:
- * esos extremos no son alcanzables). */
-#define POTENTIOMETER_MIN_CM    5.0f
-#define POTENTIOMETER_MAX_CM    25.0f
+/* --- Potenciometro (setpoint, en borde del carro) --------------------------- */
+/* Rango de setpoint que barre el pote de tope a tope, en la misma referencia
+ * que publica task_sensor.c (borde del carro que encara al sensor): el mismo
+ * rango que ve el sensor, SENSOR_MIN_CM..SENSOR_MAX_CM. */
+#define POTENTIOMETER_MIN_CM    SENSOR_MIN_CM
+#define POTENTIOMETER_MAX_CM    SENSOR_MAX_CM
 
-/* Setpoint por defecto, hasta que PotTask publique su primera lectura. */
-#define SETPOINT_DEFAULT_CM     (BEAM_LENGTH_CM * 0.5f)
+/* Setpoint por defecto, hasta que PotTask publique su primera lectura: punto
+ * medio del rango de borde realmente alcanzable. */
+#define SETPOINT_DEFAULT_CM     ((POTENTIOMETER_MIN_CM + POTENTIOMETER_MAX_CM) * 0.5f)
 
 /* --- Servo MG90S (actuador) ----------------------------------------------- */
 /* La recta grados <-> us vive en el driver; aca solo lo que decide la app, en
