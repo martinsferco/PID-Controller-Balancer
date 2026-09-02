@@ -5,12 +5,19 @@
   *          de TIM4), dispara el HC-SR04, espera el echo (sem_sensor) y publica
   *          la distancia cruda en queue_pos.
   *
-  *          Politica: medir siempre que sea posible. Una lectura que cae fuera
-  *          de la ventana util pero a menos de SENSOR_EDGE_GRACE_CM del borde se
-  *          recorta y se publica igual (la pelota esta en la punta de la barra o
-  *          en la zona muerta del sensor, y esa es informacion real). Solo se
-  *          descarta el eco que volvio del ambiente, que si se usara mandaria al
-  *          PID a inclinar por una pelota que no esta.
+  *          Politica: medir siempre que sea posible, nunca descartar en
+  *          silencio. Una lectura que cae fuera de la ventana util pero a
+  *          menos de SENSOR_EDGE_GRACE_CM del borde se recorta al borde (la
+  *          pelota esta en la punta de la barra o en la zona muerta del
+  *          sensor). Una lectura MUY fuera de rango es el eco fantasma de la
+  *          zona ciega del HC-SR04 (por debajo de ~2 cm el modulo no recibe
+  *          rebote real y el ECHO se queda en alto hasta su propio timeout
+  *          interno, que el driver mide igual y convierte en una distancia
+  *          enorme): la barra vive dentro de un armazon, asi que ese valor no
+  *          puede ser un eco real del ambiente, y se recorta a SENSOR_MIN_CM.
+  *          No descartar es lo que importa: si SensorTask deja de publicar,
+  *          la cascada de timeouts (Kalman -> Pid -> Motor) termina en el
+  *          failsafe de MotorTask, que nivela la barra y no reintenta solo.
   *
   *          El sensor ya viene creado, inicializado y con el callback puesto
   *          desde App_Init; la task solo recibe el contexto y corre el lazo.
@@ -59,17 +66,32 @@ void SensorTask(void *argument)
     }
     else if (st == HC_SR04_INVALID)
     {
-      /* La medicion se hizo bien: solo cayo fuera de la ventana util. A un pelo
-       * del borde es la pelota en la punta de la barra (o pegada al sensor): se
-       * recorta y se publica, porque descartarla dejaria al PID sin dato nuevo y
-       * al servo congelado en la ultima inclinacion. Lejos de la ventana es un
-       * eco del ambiente: esa si se descarta. */
-      if ((dist > (SENSOR_MIN_CM - SENSOR_EDGE_GRACE_CM)) &&
-          (dist < (SENSOR_MAX_CM + SENSOR_EDGE_GRACE_CM)))
+      /* La medicion se hizo bien: solo cayo fuera de la ventana util. Nunca se
+       * descarta -- ver la politica en el encabezado del archivo. */
+      float borde;
+
+      if (dist < SENSOR_MIN_CM)
       {
-        float borde = (dist < SENSOR_MIN_CM) ? SENSOR_MIN_CM : SENSOR_MAX_CM;
-        xQueueOverwrite(context->queue_pos, &borde);
+        /* Por debajo del borde inferior (con o sin gracia): la pelota esta
+         * pegada al sensor o en su zona muerta. */
+        borde = SENSOR_MIN_CM;
       }
+      else if (dist < (SENSOR_MAX_CM + SENSOR_EDGE_GRACE_CM))
+      {
+        /* A un pelo del borde superior: la pelota esta en la punta de la
+         * barra. */
+        borde = SENSOR_MAX_CM;
+      }
+      else
+      {
+        /* Muy por encima del borde superior: no es un objeto lejano (la
+         * barra esta encerrada, no puede rebotar en el ambiente) sino el eco
+         * fantasma de la zona ciega. Misma conclusion que el primer caso:
+         * pelota pegada al sensor. */
+        borde = SENSOR_MIN_CM;
+      }
+
+      xQueueOverwrite(context->queue_pos, &borde);
     }
   }
 }
