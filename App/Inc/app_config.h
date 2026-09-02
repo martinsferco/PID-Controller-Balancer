@@ -79,11 +79,11 @@
 /* ======================== Tasks y tiempos de FreeRTOS ===================== */
 
 /* Stack en WORDS (no bytes). Prioridad mayor = mas urgente. */
-#define SENSOR_TASK_STACK       384u
-#define KALMAN_TASK_STACK       256u
-#define PID_TASK_STACK          384u
-#define MOTOR_TASK_STACK        384u
-#define POT_TASK_STACK          192u
+#define SENSOR_TASK_STACK       400u
+#define KALMAN_TASK_STACK       300u
+#define PID_TASK_STACK          400u
+#define MOTOR_TASK_STACK        400u
+#define POT_TASK_STACK          300u
 
 #define SENSOR_TASK_PRIO        5u
 #define KALMAN_TASK_PRIO        4u
