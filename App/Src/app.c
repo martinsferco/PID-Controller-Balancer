@@ -3,8 +3,9 @@
   * @file    app.c
   * @brief   Composition root del sistema de control PID para balanceo: crea las
   *          instancias de los drivers (opacos, via Create), las inicializa y
-  *          configura, arma la IPC (4 colas + queue set + 2 semaforos), rellena
-  *          un contexto por task y las crea. Aloja tambien los hooks de ISR.
+  *          configura, arma la IPC (4 colas + queue set + 2 semaforos),
+  *          rellena un contexto por task y las crea. Aloja tambien los hooks
+  *          de ISR.
   *
   *          Reparto de memoria (todo persistente, nada en stack automatico):
   *            - Lo que toca la ISR (SemSensor, SemTimer y el handle del sensor
