@@ -14,42 +14,101 @@ Largo útil de la barra, medido **desde la cara del sensor**.
 ### Sensor HC-SR04 (`SENSOR_MIN_CM`, `SENSOR_MAX_CM`, `SENSOR_ECHO_TIMEOUT_MS`)
 Todo el lazo (sensor, Kalman, PID, setpoint del pote) trabaja en la misma referencia: el
 **borde** del carro que encara al sensor, que es justo lo que mide el HC-SR04 — así
-`task_sensor.c` publica la lectura cruda en `queue_pos` sin convertir nada, y
-`POTENTIOMETER_MIN_CM/MAX_CM` son directamente `SENSOR_MIN_CM`/`SENSOR_MAX_CM`.
+`task_sensor.c` publica en `queue_pos` la distancia medida (real, no inventada salvo en el caso
+`HC_SR04_INVALID` de abajo).
 
-- `HC_SR04_HW_MIN_CM = 2.0` (vive en `hc_sr04.h`, no acá): zona muerta real del componente,
-  hecho del datasheet. Es del driver y no de la app porque otro sensor de distancia sería otro
-  módulo con otro límite; `app_config.h` la referencia en vez de duplicarla.
-- `SENSOR_SAFETY_MARGIN_CM = 1.0`: headroom de la app sobre esa zona muerta. **No es lo mismo**
-  "el sensor no detecta por debajo de X" que "el sensor detecta de forma confiable en X": pegado
-  al límite exacto la lectura se vuelve poco confiable (eco débil o ausente por efecto de campo
-  cercano), y ya vimos ese caso concreto (commit `d4d49a4`): con el carro pegado al sensor el
-  ECHO se cuelga en alto hasta su timeout interno y el driver lo convierte en una distancia
-  enorme. Si el problema reaparece en banco, subir este margen (no `HC_SR04_HW_MIN_CM`, que es
-  un hecho del componente, no un parámetro de ajuste de la app).
-- `SENSOR_MIN_CM = HC_SR04_HW_MIN_CM + SENSOR_SAFETY_MARGIN_CM = 3.0`: esto es lo que realmente
-  se le pide al carro que respete.
-- `SENSOR_MAX_CM = 20.5`: borde máximo, medido directamente con el carro apoyado contra su tope
+- `HC_SR04_HW_MIN_CM = 2.0` (vive en `hc_sr04.h`, no acá): zona muerta real del componente
+  (datasheet) — por debajo de esto el eco no es físicamente posible, y el driver ya clasifica
+  la lectura como `HC_SR04_INVALID`. Es del driver y no de la app porque otro módulo HC-SR04
+  podría tener otro límite; `app_config.h` la referencia en vez de duplicarla.
+
+  Se probó subirla a 3.0 (medida en banco donde por debajo de 3 cm el eco parecía poco
+  confiable), pero eso mueve el límite de "físicamente posible" a "confiable" al lugar
+  equivocado: hace que el *driver* rechace como inválidas lecturas de 2-3 cm que son reales,
+  en vez de que sea la *app* la que decida no confiar en ellas. Revertido: la confiabilidad es
+  política de `SENSOR_SAFETY_MARGIN_CM`, no de `HC_SR04_HW_MIN_CM`.
+- `SENSOR_SAFETY_MARGIN_CM = 2.0`: headroom de la app sobre esa zona muerta, usado para calcular
+  `SENSOR_MIN_CM` de abajo. **No es un piso que se le fuerce a toda lectura** — ver la política
+  de `task_sensor.c` a continuación, es más sutil que eso.
+- `SENSOR_MIN_CM = HC_SR04_HW_MIN_CM + SENSOR_SAFETY_MARGIN_CM = 4.0`: base del rango de
+  setpoint del pote (ver más abajo) y, dividido a la mitad, de la proximidad asumida para el
+  caso `HC_SR04_INVALID` de distancia gigantesca (ver la política de `task_sensor.c` a
+  continuación) — no es un piso que se le fuerce directamente a una lectura.
+- `SENSOR_MAX_CM = 21.0`: borde máximo, medido directamente con el carro apoyado contra su tope
   mecánico (choca contra el motor antes de llegar a `BEAM_LENGTH_CM`). Es una medida física
-  directa, no una derivación — no hace falta descomponerla en offset al centro del carro más
-  margen al motor para poder tomarla.
+  directa, no una derivación. A diferencia de `SENSOR_MIN_CM`, este sí es un techo real: más
+  allá no es físicamente alcanzable, así que **toda** lectura (`OK` o `INVALID`) se recorta acá.
 - `SENSOR_ECHO_TIMEOUT_MS = 80`: guarda del `xSemaphoreTake` del echo en la task. Tiene que
   ser **menor que el período** del tick del sensor (100 ms) y **mayor que el timeout interno**
   del driver. Es un timeout de *scheduling*, distinto del timeout de hardware del driver.
 
-### Banda de gracia en los bordes (`SENSOR_EDGE_GRACE_CM = 3.0`)
-Una medición que cae fuera de `[SENSOR_MIN_CM, SENSOR_MAX_CM]` pero a menos de esto del borde
-se recorta y se usa igual, porque significa que el carro está en la punta de la barra o pegado
-al sensor. Más lejos se descarta: eso ya es un eco del ambiente, y usarlo haría inclinar la
-barra por un carro que no está ahí. Por eso la banda tiene que ser chica.
+#### Política de `task_sensor.c`: por qué `HC_SR04_OK` e `HC_SR04_INVALID` se tratan distinto
+
+Antes esto era una sola regla de recorte (cualquier lectura por debajo de `SENSOR_MIN_CM` se
+publicaba como `SENSOR_MIN_CM`, sin importar si el driver la había clasificado `OK` o
+`INVALID`). Se descartó: con el carro genuinamente cerca del sensor pero sin llegar a la zona
+muerta (el driver confirma un eco real, `HC_SR04_OK`, con `dist` entre 2 y 4 cm), clampear a un
+valor **constante** le esconde al lazo de control el movimiento real del carro — Kalman ve la
+misma medición en cada muestra, la velocidad estimada colapsa a cero, y el PID deja de ver un
+error que refleje la posición real. Se vio en banco: con el carro pegado al sensor, el setpoint
+del pote también en su mínimo (que antes coincidía exactamente con `SENSOR_MIN_CM`), el PID no
+producía ninguna corrección — el error daba ≈0 aunque no hubiera forma de saber si el carro
+estaba realmente ahí o mucho más cerca.
+
+La regla ahora distingue las dos razones por las que puede no haber un número confiable:
+
+- **`HC_SR04_OK`**: el driver confirma un eco real. Se publica la medición **tal cual**, sin
+  importar si cae por debajo de `SENSOR_MIN_CM` — es información real, no ambigua. Solo se
+  recorta el extremo lejano (a `SENSOR_MAX_CM`): un eco real más allá de eso no es físicamente
+  alcanzable, el carro choca contra su tope mecánico antes.
+- **`HC_SR04_INVALID`**: el driver NO confirma un eco real, y la razón puede ser una de dos, que
+  `task_sensor.c` distingue mirando `dist` (el único chequeo que puede hacer, ya que
+  `HC_SR04_INVALID` en sí no dice cuál de las dos fue):
+  - `dist < HC_SR04_HW_MIN_CM`: zona ciega, no hay rebote — el carro está prácticamente tocando
+    el sensor. Se publica `HC_SR04_HW_MIN_CM` directamente: es el piso físico real, no hace
+    falta inventar otro número.
+  - `dist > HC_SR04_HW_MAX_CM`: eco fantasma — con el carro pegado al sensor, el ECHO se queda
+    en alto hasta el timeout interno del driver, que lo convierte en una distancia enorme. Esta
+    lectura no tiene **ninguna** relación con la distancia real (a diferencia del caso
+    anterior, donde el número al menos venía de un intento de medición cerca del límite), así
+    que en vez del piso físico se asume una proximidad más conservadora: `SENSOR_MIN_CM / 2.0`
+    (hoy 2.0, directo en `task_sensor.c` en vez de una constante propia en `app_config.h` —
+    coincide numéricamente con `HC_SR04_HW_MIN_CM`, pero son cosas conceptualmente distintas).
+
+  Como la barra está encerrada, ninguna de las dos puede ser un eco real del ambiente: la única
+  explicación física en ambos casos es carro pegado al sensor. `HC_SR04_HW_MAX_CM` se bajó de
+  450 a 400 cm (más cerca del rango real de datasheet del módulo) para que este caso se
+  detecte más rápido.
+
+Con esto, `SENSOR_EDGE_GRACE_CM` (la banda de gracia que existía para decidir, dentro del caso
+`INVALID`, si una lectura estaba "cerca" o "lejos" del borde superior) quedó sin uso: dado que
+`HC_SR04_HW_MAX_CM` es enorme comparado con la barra (30 cm), `HC_SR04_INVALID` en la práctica
+solo ocurre por estar demasiado cerca o por el eco fantasma (nunca por estar "demasiado lejos"
+en este montaje), así que esa rama de la banda de gracia era código muerto — nunca se
+ejecutaba. Se eliminó la constante junto con el código.
+
+Nunca se descarta una lectura (`OK` o `INVALID`, siempre se publica algo): si `SensorTask`
+dejara de publicar, la cascada de timeouts (Kalman → PID → Motor) termina en el failsafe de
+`MotorTask`, que nivela la barra y no reintenta solo.
 
 ### Potenciómetro / setpoint (`POTENTIOMETER_MIN_CM`, `POTENTIOMETER_MAX_CM`)
 Rango de setpoint que barre el pote de tope a tope, en la misma referencia que publica
-`task_sensor.c` (borde del carro que encara al sensor) — por eso son directamente el mismo
-rango que ve el sensor, sin ningún offset:
+`task_sensor.c` (borde del carro que encara al sensor) — el mismo rango que ve el sensor,
+directamente `SENSOR_MIN_CM`/`SENSOR_MAX_CM`, sin ningún offset:
 
-- `POTENTIOMETER_MIN_CM = SENSOR_MIN_CM = 3.0`
-- `POTENTIOMETER_MAX_CM = SENSOR_MAX_CM = 20.5`
+- `POTENTIOMETER_MIN_CM = SENSOR_MIN_CM = 4.0`
+- `POTENTIOMETER_MAX_CM = SENSOR_MAX_CM = 21.0`
+
+Se probó un margen propio (`POTENTIOMETER_MARGIN_CM`, separando este rango de la ventana de
+medición) para que el pote nunca pudiera pedir justo el valor donde `HC_SR04_INVALID` clampeaba
+— visto en banco: con `POTENTIOMETER_MIN_CM` igual a `SENSOR_MIN_CM` (mismo valor de esta
+sección) y el diseño anterior de `task_sensor.c` (donde **toda** lectura por debajo de
+`SENSOR_MIN_CM`, `OK` o `INVALID`, se clampeaba ahí), el carro pegado al sensor y el pote en su
+mínimo hacían coincidir exactamente la posición clampeada con el setpoint: el PID veía error ≈ 0
+y no corregía nada, aunque no hubiera forma de saber si el carro estaba realmente ahí o más
+cerca todavía. Con la política actual de `task_sensor.c` (`HC_SR04_INVALID` clampea a
+`HC_SR04_HW_MIN_CM` o a `SENSOR_MIN_CM / 2`, ambos bien por debajo de `SENSOR_MIN_CM`) esa
+coincidencia ya no se da, así que el margen aparte no aportaba nada más. Se sacó.
 
 **No** es `0..BEAM_LENGTH_CM` porque ninguno de esos dos extremos es alcanzable: por abajo el
 sensor no ve nada antes de `SENSOR_MIN_CM`, y por arriba el carro choca contra el motor. Pedir
@@ -59,7 +118,7 @@ un setpoint inalcanzable deja al proporcional inclinando para siempre contra un 
 Kalman filtrando `queue_pos`): como ambos están en la misma referencia de borde, no hace falta
 convertir nada en el lazo de control.
 
-`SETPOINT_DEFAULT_CM = (POTENTIOMETER_MIN_CM + POTENTIOMETER_MAX_CM) * 0.5 = 11.75`: setpoint
+`SETPOINT_DEFAULT_CM = (POTENTIOMETER_MIN_CM + POTENTIOMETER_MAX_CM) * 0.5 = 12.5`: setpoint
 por defecto hasta que `PotTask` publique su primera lectura, punto medio del rango de borde
 realmente alcanzable.
 

@@ -40,9 +40,12 @@ typedef struct HC_SR04_Handle HC_SR04_HandleTypeDef;
 /* Limites fisicos del HC-SR04 (datasheet): NO son configurables. El driver ES
  * el HC-SR04, asi que estos limites son un hecho del componente, no de la
  * aplicacion que lo usa. Publicos porque la app los necesita para derivar sus
- * propios rangos (ver SENSOR_MIN_CM en app_config.h) sin duplicarlos. */
+ * propios rangos (ver SENSOR_MIN_CM en app_config.h) sin duplicarlos.
+ * Por debajo de HC_SR04_HW_MIN_CM el eco deja de ser fisicamente posible
+ * (zona ciega real); eso es distinto de "confiable", que es politica de la
+ * app via SENSOR_SAFETY_MARGIN_CM en app_config.h. */
 #define HC_SR04_HW_MIN_CM      2.0f
-#define HC_SR04_HW_MAX_CM      450.0f
+#define HC_SR04_HW_MAX_CM      400.0f
 
 /* Hook opcional invocado (en contexto de ISR) al completar una medicion.
  * Usalo para dar un semaforo a tu TaskSensor: ...GiveFromISR(). */

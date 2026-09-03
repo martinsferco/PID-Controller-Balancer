@@ -8,15 +8,31 @@
   *          esa misma referencia.
   *
   *          Politica: medir siempre que sea posible, nunca descartar en
-  *          silencio. Una lectura que cae fuera de la ventana util pero a
-  *          menos de SENSOR_EDGE_GRACE_CM del borde se recorta al borde (el
-  *          carro esta en la punta de la barra o en la zona muerta del
-  *          sensor). Una lectura MUY fuera de rango es el eco fantasma de la
-  *          zona ciega del HC-SR04 (por debajo de ~2 cm el modulo no recibe
-  *          rebote real y el ECHO se queda en alto hasta su propio timeout
-  *          interno, que el driver mide igual y convierte en una distancia
-  *          enorme): la barra vive dentro de un armazon, asi que ese valor no
-  *          puede ser un eco real del ambiente, y se recorta a SENSOR_MIN_CM.
+  *          silencio, y no tirar informacion real solo porque cae mas cerca
+  *          de lo que la app pediria como setpoint. HC_SR04_OK y HC_SR04_INVALID
+  *          se tratan distinto porque significan cosas distintas:
+  *            - HC_SR04_OK: el driver confirma un eco real (dentro de
+  *              [HC_SR04_HW_MIN_CM, HC_SR04_HW_MAX_CM]). Se publica la
+  *              distancia medida tal cual, aunque sea menor a SENSOR_MIN_CM
+  *              -- es una medicion real, no ambigua, y clamparla a un piso fijo
+  *              le esconde al lazo de control el movimiento real del carro
+  *              cerca del sensor (eso rompia a Kalman/PID: con el mismo valor
+  *              constante en cada muestra, la velocidad estimada colapsa a
+  *              cero y el error deja de reflejar la posicion real). Solo se
+  *              recorta el extremo lejano (SENSOR_MAX_CM): un eco real mas
+  *              alla de ahi no es fisicamente alcanzable (el carro choca
+  *              contra su tope mecanico antes), asi que el carro esta en la
+  *              punta de la barra.
+  *            - HC_SR04_INVALID: el driver NO confirma un eco real, por dos
+  *              motivos distintos:
+  *                - dist < HC_SR04_HW_MIN_CM: zona ciega sin rebote, el carro
+  *                  esta practicamente tocando el sensor. Se publica
+  *                  HC_SR04_HW_MIN_CM, el piso fisico real.
+  *                - dist > HC_SR04_HW_MAX_CM: distancia enorme tras el
+  *                  timeout interno del eco fantasma, sin ninguna relacion
+  *                  con la posicion real. Se publica SENSOR_MIN_CM / 2, mas
+  *                  conservador que el piso de arriba por la incertidumbre
+  *                  extra de este caso.
   *          No descartar es lo que importa: si SensorTask deja de publicar,
   *          la cascada de timeouts (Kalman -> Pid -> Motor) termina en el
   *          failsafe de MotorTask, que nivela la barra y no reintenta solo.
@@ -62,38 +78,39 @@ void SensorTask(void *argument)
     float dist = 0.0f;
     HC_SR04_Status st = HC_SR04_GetDistance(context->sensor, &dist);
 
+    float borde;
+
     if (st == HC_SR04_OK)
     {
-      xQueueOverwrite(context->queue_pos, &dist);
+      /* Eco real: se publica la medicion tal cual, salvo el recorte al
+       * extremo lejano (el carro no puede llegar mas alla de SENSOR_MAX_CM,
+       * choca contra su tope mecanico antes). No hay piso: un eco real cerca
+       * del sensor sigue siendo informacion real, ver la politica arriba. */
+      borde = (dist > SENSOR_MAX_CM) ? SENSOR_MAX_CM : dist;
     }
     else if (st == HC_SR04_INVALID)
     {
-      /* La medicion se hizo bien: solo cayo fuera de la ventana util. Nunca se
-       * descarta -- ver la politica en el encabezado del archivo. */
-      float borde;
-
-      if (dist < SENSOR_MIN_CM)
+      /* Sin eco real, por dos motivos distintos -- ver la politica arriba. */
+      if (dist < HC_SR04_HW_MIN_CM)
       {
-        /* Por debajo del borde inferior (con o sin gracia): el carro esta
-         * pegado al sensor o en su zona muerta. */
-        borde = SENSOR_MIN_CM;
-      }
-      else if (dist < (SENSOR_MAX_CM + SENSOR_EDGE_GRACE_CM))
-      {
-        /* A un pelo del borde superior: el carro esta en la punta de la
-         * barra. */
-        borde = SENSOR_MAX_CM;
+        /* No hay rebote: el carro esta practicamente tocando el sensor. */
+        borde = HC_SR04_HW_MIN_CM;
       }
       else
       {
-        /* Muy por encima del borde superior: no es un objeto lejano (la
-         * barra esta encerrada, no puede rebotar en el ambiente) sino el eco
-         * fantasma de la zona ciega. Misma conclusion que el primer caso:
-         * carro pegado al sensor. */
-        borde = SENSOR_MIN_CM;
+        /* dist > HC_SR04_HW_MAX_CM: eco fantasma tras el timeout interno del
+         * driver. Sin ninguna relacion con la distancia real, asi que se
+         * asume una proximidad conservadora en vez del piso de arriba. */
+        borde = SENSOR_MIN_CM / 2.0f;
       }
-
-      xQueueOverwrite(context->queue_pos, &borde);
     }
+    else
+    {
+      /* BUSY/ERROR no deberian darse aca (recien se confirmo el echo), pero
+       * si pasara no hay distancia que publicar. */
+      continue;
+    }
+
+    xQueueOverwrite(context->queue_pos, &borde);
   }
 }

@@ -22,29 +22,40 @@
 
 /* --- Sensor HC-SR04 (posicion del borde del carro que encara al sensor) --- */
 /* HC_SR04_HW_MIN_CM (hc_sr04.h) es la zona muerta real del componente: por
- * debajo de eso directamente no hay eco. SENSOR_SAFETY_MARGIN_CM es el
+ * debajo de eso directamente no hay eco, y el driver ya lo clasifica como
+ * HC_SR04_INVALID -- subir esta constante (en vez del margen de abajo) achica
+ * la ventana de lecturas OK sin necesidad. SENSOR_SAFETY_MARGIN_CM es el
  * margen de seguridad de la app por encima de ese piso: pegado al limite
  * exacto la lectura deja de ser confiable (eco debil/ausente por campo
  * cercano), y el sensor deja de responder si se le pide operar justo ahi.
- * SENSOR_MIN_CM es lo que realmente se le pide al carro que respete. */
-#define SENSOR_SAFETY_MARGIN_CM 1.0f
+ * Se subio de 1.0 a 2.0 tras verificar en banco que, con HC_SR04_HW_MIN_CM en
+ * su valor real de datasheet, hacia falta mas margen.
+ * SENSOR_MIN_CM NO es un piso que task_sensor.c le fuerce a toda lectura: una
+ * medicion HC_SR04_OK mas cerca que esto se publica tal cual (es real, no
+ * ambigua). Se usa como base del rango de setpoint de mas abajo, y tambien
+ * (dividido a la mitad, directo en task_sensor.c) como la proximidad asumida
+ * para el caso HC_SR04_INVALID de distancia gigantesca (eco fantasma). */
+#define SENSOR_SAFETY_MARGIN_CM 2.0f
 #define SENSOR_MIN_CM           (HC_SR04_HW_MIN_CM + SENSOR_SAFETY_MARGIN_CM)
 
 /* Borde maximo medido con el carro apoyado contra su tope mecanico (choca
  * contra el motor antes de llegar a BEAM_LENGTH_CM). Se mide directamente
- * con el carro en ese limite, no se deduce de la geometria del carro. */
-#define SENSOR_MAX_CM           20.5f
+ * con el carro en ese limite, no se deduce de la geometria del carro. A
+ * diferencia de SENSOR_MIN_CM, este si es un techo real: mas alla no es
+ * fisicamente alcanzable, asi que toda lectura (OK o INVALID) se recorta acá. */
+#define SENSOR_MAX_CM           21.0f
 #define SENSOR_ECHO_TIMEOUT_MS  80u     /* guarda: < periodo, > timeout interno */
-
-/* Banda de gracia en los bordes: una lectura fuera de la ventana util pero a
- * menos de esto del borde se recorta y se usa (carro en la punta o pegado al
- * sensor); mas lejos es eco del ambiente y se descarta. */
-#define SENSOR_EDGE_GRACE_CM    5.0f
 
 /* --- Potenciometro (setpoint, en borde del carro) --------------------------- */
 /* Rango de setpoint que barre el pote de tope a tope, en la misma referencia
  * que publica task_sensor.c (borde del carro que encara al sensor): el mismo
- * rango que ve el sensor, SENSOR_MIN_CM..SENSOR_MAX_CM. */
+ * rango que ve el sensor, SENSOR_MIN_CM..SENSOR_MAX_CM. Se probo separarlo con
+ * un margen propio (POTENTIOMETER_MARGIN_CM) para que el pote nunca pudiera
+ * pedir justo el valor donde HC_SR04_INVALID clampeaba -- eso importaba
+ * cuando ese clamp era SENSOR_MIN_CM, pero ya no: ver la politica de
+ * task_sensor.c, ahora clampea a HC_SR04_HW_MIN_CM o a SENSOR_MIN_CM / 2,
+ * bien por debajo. Sin esa coincidencia, el margen aparte no aportaba nada;
+ * se saco. */
 #define POTENTIOMETER_MIN_CM    SENSOR_MIN_CM
 #define POTENTIOMETER_MAX_CM    SENSOR_MAX_CM
 
