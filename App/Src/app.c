@@ -16,10 +16,12 @@
   *
   *          Semaforos, colas y tasks se crean con las *Static de FreeRTOS (sin
   *          heap): cada handle lleva su StaticQueue_t/StaticSemaphore_t/
-  *          StaticTask_t + storage/stack como `static` local. Unica excepcion:
-  *          el queue set del PID (`xQueueCreateSet`), que esta version de
-  *          FreeRTOS solo compila con configSUPPORT_DYNAMIC_ALLOCATION==1 (no
-  *          existe variante static); por eso el heap sigue habilitado.
+  *          StaticTask_t + storage/stack como `static` local. El setpoint
+  *          (PotTask -> PidTask) no usa cola: es un `float` compartido, escrito
+  *          por una unica task y leido por otra, sin lock (ver comentario en
+  *          PidTask). Con esto ya no queda ninguna asignacion dinamica en el
+  *          proyecto (antes la unica era el queue set del PID, que no tenia
+  *          variante *Static en esta version de FreeRTOS).
   ******************************************************************************
   */
 
@@ -87,44 +89,23 @@ void App_Init(void)
   static uint8_t       s_queue_pos_storage[1 * sizeof(float)];
   static StaticQueue_t s_queue_pos_fil_cb;
   static uint8_t       s_queue_pos_fil_storage[1 * sizeof(PosFil_t)];
-  static StaticQueue_t s_queue_objetivo_cb;
-  static uint8_t       s_queue_objetivo_storage[1 * sizeof(float)];
   static StaticQueue_t s_queue_angulo_cb;
   static uint8_t       s_queue_angulo_storage[1 * sizeof(float)];
 
   QueueHandle_t QueuePos      = xQueueCreateStatic(1, sizeof(float), s_queue_pos_storage, &s_queue_pos_cb);
   QueueHandle_t QueuePosFil   = xQueueCreateStatic(1, sizeof(PosFil_t), s_queue_pos_fil_storage, &s_queue_pos_fil_cb);
-  QueueHandle_t QueueObjetivo = xQueueCreateStatic(1, sizeof(float), s_queue_objetivo_storage, &s_queue_objetivo_cb);
   QueueHandle_t QueueAngulo   = xQueueCreateStatic(1, sizeof(float), s_queue_angulo_storage, &s_queue_angulo_cb);
-  if (QueuePos == NULL || QueuePosFil == NULL ||
-      QueueObjetivo == NULL || QueueAngulo == NULL) { Error_Handler(); }
+  if (QueuePos == NULL || QueuePosFil == NULL || QueueAngulo == NULL) { Error_Handler(); }
 
-  /* --- Queue set del PID (QueuePosFil + QueueObjetivo) ---------------------
-   * Longitud 4, no 2. La regla de FreeRTOS (suma de las profundidades = 1+1)
-   * vale para colas normales, pero aca se publica con xQueueOverwrite: cada
-   * escritura genera un aviso al set AUNQUE la cola ya tuviera un dato sin
-   * leer, asi que los avisos pendientes pueden superar la cantidad de datos. Si
-   * el contenedor se llena, FreeRTOS pega en un configASSERT, que en este
-   * proyecto es taskDISABLE_INTERRUPTS() + for(;;): un cuelgue mudo. Dos slots
-   * de mas cuestan 16 bytes.
-   *
-   * Sin variante *Static: xQueueCreateSet() esta compilado solo bajo
-   * configSUPPORT_DYNAMIC_ALLOCATION==1 en esta version de FreeRTOS (no existe
-   * xQueueCreateSetStatic). Es la unica asignacion dinamica que queda en todo
-   * el proyecto; por eso el heap sigue habilitado en FreeRTOSConfig.h.
-   *
-   * Alternativa que se evaluo y no se uso: reemplazar este queue set por
-   * notificaciones de tarea (xTaskNotify con eSetBits en cada productor,
-   * xTaskNotifyWait en PidTask). Un bit no tiene "profundidad" -- prender un
-   * bit ya prendido no desborda nada, asi que se saca de encima el riesgo del
-   * configASSERT de arriba sin depender de un margen empirico, y de paso esta
-   * asignacion dinamica dejaria de existir. Se prefirio quedarse con colas
-   * (IPC uniforme en todo el proyecto) y aceptar el margen; queda anotado por
-   * si el desborde llegara a darse en la practica. */
-  QueueSetHandle_t QueueSetPid = xQueueCreateSet(4);
-  if (QueueSetPid == NULL) { Error_Handler(); }
-  if (xQueueAddToSet(QueuePosFil,   QueueSetPid) != pdPASS) { Error_Handler(); }
-  if (xQueueAddToSet(QueueObjetivo, QueueSetPid) != pdPASS) { Error_Handler(); }
+  /* --- Setpoint (PotTask -> PidTask), sin cola --------------------------
+   * PidTask solo recalcula cuando llega una posicion nueva por QueuePosFil
+   * (ver task_pid.c); un setpoint nuevo no dispara ningun computo, solo debe
+   * quedar disponible para la proxima posicion. Con un solo escritor y un
+   * solo lector, y un float alineado (atomico en una instruccion en
+   * Cortex-M), no hace falta cola ni mutex: alcanza con un `static` local
+   * (misma duracion que los contextos de abajo) pasado por puntero a ambas
+   * tasks. */
+  static float s_setpoint = SETPOINT_DEFAULT_CM;
 
   /* --- Sensor HC-SR04: Create + Init + callback ---
    * El rango fisico del sensor es fijo (constantes de hardware en el driver);
@@ -180,9 +161,8 @@ void App_Init(void)
 
   static TaskPidContext pid_ctx;
   pid_ctx.pid            = pid;
-  pid_ctx.queue_set      = QueueSetPid;
   pid_ctx.queue_pos_fil  = QueuePosFil;
-  pid_ctx.queue_objetivo = QueueObjetivo;
+  pid_ctx.setpoint       = &s_setpoint;
   pid_ctx.queue_angulo   = QueueAngulo;
 
   static TaskMotorContext motor_ctx;
@@ -191,7 +171,7 @@ void App_Init(void)
 
   static TaskPotContext pot_ctx;
   pot_ctx.pot            = pot;
-  pot_ctx.queue_objetivo = QueueObjetivo;
+  pot_ctx.setpoint       = &s_setpoint;
 
   /* --- Tasks (una por archivo, prioridades en app_config.h) ---
    * *Static: TCB y stack de cada task, static locales por la misma razon que

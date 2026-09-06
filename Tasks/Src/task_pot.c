@@ -3,7 +3,8 @@
   * @file    task_pot.c
   * @brief   Task del potenciometro (prio 1). Cada POT_PERIOD_MS lee la posicion
   *          NORMALIZADA del pote (0.0..1.0) y la mapea al rango de setpoint en cm
-  *          con linear_map, publicando el resultado en queue_objetivo.
+  *          con linear_map, publicando el resultado en *context->setpoint (una
+  *          variable compartida con PidTask, sin cola de por medio).
   *
   *          La lectura y la conversion son responsabilidades separadas: el
   *          driver del pote solo lee (normalizado), y esta task decide a que
@@ -19,7 +20,6 @@
 
 #include "FreeRTOS.h"
 #include "task.h"
-#include "queue.h"
 
 void PotTask(void *argument)
 {
@@ -34,9 +34,8 @@ void PotTask(void *argument)
     float norm = 0.0f;
     if (Potentiometer_ReadNormalized(context->pot, &norm) == POTENTIOMETER_OK)
     {
-      float setpoint = linear_map(norm, 0.0f, 1.0f,
-                                  POTENTIOMETER_MIN_CM, POTENTIOMETER_MAX_CM);
-      xQueueOverwrite(context->queue_objetivo, &setpoint);
+      *context->setpoint = linear_map(norm, 0.0f, 1.0f,
+                                      POTENTIOMETER_MIN_CM, POTENTIOMETER_MAX_CM);
     }
   }
 }

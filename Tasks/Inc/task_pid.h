@@ -1,7 +1,7 @@
 /**
   ******************************************************************************
   * @file    task_pid.h
-  * @brief   Task del control PID: QueueSet{QueuePosFil, QueueObjetivo} -> QueueAngulo.
+  * @brief   Task del control PID: QueuePosFil + *setpoint -> QueueAngulo.
   ******************************************************************************
   */
 
@@ -19,9 +19,8 @@ extern "C" {
 /** @brief Todo lo que usa PidTask (handle ya configurado + IPC). */
 typedef struct {
     PID_HandleTypeDef *pid;             /* controlador ya configurado         */
-    QueueSetHandle_t   queue_set;       /* bloquea en pos_fil + objetivo      */
     QueueHandle_t      queue_pos_fil;   /* entrada: pos + vel estimadas       */
-    QueueHandle_t      queue_objetivo;  /* entrada: setpoint (pote)           */
+    volatile float    *setpoint;        /* entrada: setpoint vigente, sin cola (lo escribe PotTask) */
     QueueHandle_t      queue_angulo;    /* salida: angulo para el servo       */
 } TaskPidContext;
 

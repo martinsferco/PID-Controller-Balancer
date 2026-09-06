@@ -1,7 +1,7 @@
 /**
   ******************************************************************************
   * @file    task_pot.h
-  * @brief   Task del potenciometro (setpoint): ADC -> QueueObjetivo.
+  * @brief   Task del potenciometro (setpoint): ADC -> *setpoint (sin cola).
   ******************************************************************************
   */
 
@@ -14,12 +14,11 @@ extern "C" {
 
 #include "potentiometer.h"
 #include "FreeRTOS.h"
-#include "queue.h"
 
 /** @brief Todo lo que usa PotTask (handle ya configurado + IPC). */
 typedef struct {
-    Potentiometer_HandleTypeDef *pot;             /* pote ya inicializado     */
-    QueueHandle_t                queue_objetivo;  /* salida: setpoint          */
+    Potentiometer_HandleTypeDef *pot;      /* pote ya inicializado                             */
+    volatile float              *setpoint; /* salida: setpoint vigente, lo lee PidTask directo */
 } TaskPotContext;
 
 void PotTask(void *argument);
