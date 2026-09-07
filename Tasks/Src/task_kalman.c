@@ -10,6 +10,7 @@
 #include "task_kalman.h"
 #include "app.h"          // PosFil_t
 #include "app_config.h"
+#include "debug_uart.h"
 
 #include "FreeRTOS.h"
 #include "task.h"
@@ -32,10 +33,14 @@ void KalmanTask(void *argument)
       est.pos = Kalman_Update(context->kalman, z);        // posicion estimada
       est.vel = Kalman_GetVelocity(context->kalman);      // vel del update
       xQueueOverwrite(context->queue_pos_fil, &est);
+
+      DebugUart_Print("[%10lu] KALMAN z=%.2fcm pos=%.2fcm vel=%.2fcm/s\r\n",
+                       (unsigned long)HAL_GetTick(), z, est.pos, est.vel);
     }
     else
     {
       inicializado = 0;
+      DebugUart_Print("[%10lu] KALMAN timeout, reset\r\n", (unsigned long)HAL_GetTick());
     }
   }
 }

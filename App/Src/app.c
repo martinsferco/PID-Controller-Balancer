@@ -9,6 +9,7 @@
 
 #include "app.h"
 #include "app_config.h"
+#include "debug_uart.h"
 #include "task_sensor.h"
 #include "task_kalman.h"
 #include "task_pid.h"
@@ -50,6 +51,9 @@ void App_OnTimerTick_FromISR(void)
 
 void App_Init(void)
 {
+  // Traza de debug por USART2 (COM3)
+  DebugUart_Init();
+
   // Semaforos binarios (los usan los hooks)
   static StaticSemaphore_t s_sem_timer_cb;
   static StaticSemaphore_t s_sem_sensor_cb;

@@ -10,11 +10,24 @@
 
 #include "task_sensor.h"
 #include "app_config.h"
+#include "debug_uart.h"
 
 #include "FreeRTOS.h"
 #include "task.h"
 #include "semphr.h"
 #include "queue.h"
+
+static const char *SensorStatusName(HC_SR04_Status st)
+{
+  switch (st)
+  {
+    case HC_SR04_OK:      return "OK";
+    case HC_SR04_BUSY:    return "BUSY";
+    case HC_SR04_TIMEOUT: return "TIMEOUT";
+    case HC_SR04_INVALID: return "INVALID";
+    default:              return "ERROR";
+  }
+}
 
 void SensorTask(void *argument)
 {
@@ -28,12 +41,17 @@ void SensorTask(void *argument)
     // Descartar cualquier aviso viejo, para esperar SOLO esta medicion
     (void)xSemaphoreTake(context->sem_sensor, 0);
 
-    if (HC_SR04_Trigger(context->sensor) != HC_SR04_OK) { continue; }
+    if (HC_SR04_Trigger(context->sensor) != HC_SR04_OK)
+    {
+      DebugUart_Print("[%10lu] SENSOR trigger BUSY\r\n", (unsigned long)HAL_GetTick());
+      continue;
+    }
 
     if (xSemaphoreTake(context->sem_sensor, pdMS_TO_TICKS(SENSOR_ECHO_TIMEOUT_MS)) != pdTRUE)
     {
       float descarte = 0.0f;
       (void)HC_SR04_GetDistance(context->sensor, &descarte);
+      DebugUart_Print("[%10lu] SENSOR status=TIMEOUT\r\n", (unsigned long)HAL_GetTick());
       continue;
     }
 
@@ -52,8 +70,12 @@ void SensorTask(void *argument)
     }
     else
     {
-      continue;   
+      DebugUart_Print("[%10lu] SENSOR status=%s\r\n", (unsigned long)HAL_GetTick(), SensorStatusName(st));
+      continue;
     }
+
+    DebugUart_Print("[%10lu] SENSOR dist=%.2fcm status=%s borde=%.2fcm\r\n",
+                     (unsigned long)HAL_GetTick(), dist, SensorStatusName(st), borde);
 
     xQueueOverwrite(context->queue_pos, &borde);
   }

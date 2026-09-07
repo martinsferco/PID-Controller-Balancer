@@ -10,6 +10,7 @@
 #include "task_pid.h"
 #include "app.h"          // PosFil_t
 #include "app_config.h"
+#include "debug_uart.h"
 
 #include "FreeRTOS.h"
 #include "task.h"
@@ -26,9 +27,18 @@ void PidTask(void *argument)
   {
     if (xQueueReceive(context->queue_pos_fil, &est, pdMS_TO_TICKS(PID_TASK_TIMEOUT_MS)) == pdTRUE)
     {
-      float u     = PID_ComputeRate(context->pid, *context->setpoint, est.pos, est.vel);
-      float angle = SERVO_CENTER_DEG + (SERVO_DIR * u);
+      float setpoint = *context->setpoint;
+      float error    = setpoint - est.pos;
+      float u        = PID_ComputeRate(context->pid, setpoint, est.pos, est.vel);
+      float angle    = SERVO_CENTER_DEG + (SERVO_DIR * u);
       xQueueOverwrite(context->queue_angulo, &angle);
+
+      DebugUart_Print("[%10lu] PID setpoint=%.2fcm pos=%.2fcm vel=%.2fcm/s error=%.2fcm u=%.2fdeg angle=%.2fdeg\r\n",
+                       (unsigned long)HAL_GetTick(), setpoint, est.pos, est.vel, error, u, angle);
+    }
+    else
+    {
+      DebugUart_Print("[%10lu] PID timeout\r\n", (unsigned long)HAL_GetTick());
     }
   }
 }
