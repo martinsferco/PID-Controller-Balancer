@@ -1,7 +1,9 @@
 /**
   ******************************************************************************
   * @file    task_kalman.h
-  * @brief   Task del filtro de Kalman: QueuePos -> QueuePosFil.
+  * @brief   Task del filtro de Kalman: filtra la distancia cruda recibida
+  *          (posicion + velocidad estimadas) y publica el resultado (IPC en
+  *          TaskKalmanContext).
   ******************************************************************************
   */
 
@@ -16,11 +18,10 @@ extern "C" {
 #include "FreeRTOS.h"
 #include "queue.h"
 
-/** @brief Todo lo que usa KalmanTask (handle ya configurado + IPC). */
 typedef struct {
-    Kalman_HandleTypeDef *kalman;         /* filtro ya inicializado           */
-    QueueHandle_t         queue_pos;      /* entrada: distancia cruda         */
-    QueueHandle_t         queue_pos_fil;  /* salida: pos + vel estimadas      */
+    Kalman_HandleTypeDef *kalman;         // filtro ya inicializado
+    QueueHandle_t         queue_pos;      // entrada: distancia cruda
+    QueueHandle_t         queue_pos_fil;  // salida: pos + vel estimadas
 } TaskKalmanContext;
 
 void KalmanTask(void *argument);
@@ -29,4 +30,4 @@ void KalmanTask(void *argument);
 }
 #endif
 
-#endif /* TASK_KALMAN_H */
+#endif // TASK_KALMAN_H

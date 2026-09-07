@@ -2,8 +2,6 @@
   ******************************************************************************
   * @file    linear_map.h
   * @brief   Mapeo afin de un valor de un rango de entrada a uno de salida.
-  *          Modulo PURO: solo <float>, sin HAL ni FreeRTOS. Reusable para
-  *          convertir cualquier lectura normalizada a una magnitud fisica.
   ******************************************************************************
   */
 
@@ -16,9 +14,7 @@ extern "C" {
 
 /**
   * @brief  Mapea x del rango [in_min, in_max] al rango [out_min, out_max] de
-  *         forma lineal. No recorta: si x cae fuera del rango de entrada, el
-  *         resultado extrapola. Con in_min == in_max devuelve out_min (evita
-  *         dividir por cero).
+  *         forma lineal.
   */
 float linear_map(float x, float in_min, float in_max, float out_min, float out_max);
 
@@ -26,4 +22,4 @@ float linear_map(float x, float in_min, float in_max, float out_min, float out_m
 }
 #endif
 
-#endif /* LINEAR_MAP_H */
+#endif // LINEAR_MAP_H

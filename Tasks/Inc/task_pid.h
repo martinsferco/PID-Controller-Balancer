@@ -1,7 +1,9 @@
 /**
   ******************************************************************************
   * @file    task_pid.h
-  * @brief   Task del control PID: QueuePosFil + *setpoint -> QueueAngulo.
+  * @brief   Task del control PID: con cada posicion nueva, calcula la accion
+  *          de control contra el setpoint vigente y publica el angulo
+  *          resultante (IPC en TaskPidContext).
   ******************************************************************************
   */
 
@@ -16,12 +18,11 @@ extern "C" {
 #include "FreeRTOS.h"
 #include "queue.h"
 
-/** @brief Todo lo que usa PidTask (handle ya configurado + IPC). */
 typedef struct {
-    PID_HandleTypeDef *pid;             /* controlador ya configurado         */
-    QueueHandle_t      queue_pos_fil;   /* entrada: pos + vel estimadas       */
-    volatile float    *setpoint;        /* entrada: setpoint vigente, sin cola (lo escribe PotTask) */
-    QueueHandle_t      queue_angulo;    /* salida: angulo para el servo       */
+    PID_HandleTypeDef *pid;             // controlador ya configurado
+    QueueHandle_t      queue_pos_fil;   // entrada: pos + vel estimadas
+    volatile float    *setpoint;        // entrada: setpoint vigente, sin cola (lo escribe PotTask)
+    QueueHandle_t      queue_angulo;    // salida: angulo para el servo
 } TaskPidContext;
 
 void PidTask(void *argument);
@@ -30,4 +31,4 @@ void PidTask(void *argument);
 }
 #endif
 
-#endif /* TASK_PID_H */
+#endif // TASK_PID_H

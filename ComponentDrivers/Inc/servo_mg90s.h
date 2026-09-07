@@ -1,16 +1,9 @@
 /**
   ******************************************************************************
   * @file    servo_mg90s.h
-  * @brief   Driver HAL para servo MG90S (y similares de hobby) por PWM.
-  *          Interfaz en grados (escala 0..180); los microsegundos son asunto del
-  *          driver. La aplicacion solo declara el recorrido permitido con
-  *          Servo_SetTravel, y Servo_SetAngle satura a ese recorrido.
-  *          RTOS-agnostico y multi-instancia.
+  * @brief   Driver HAL para servo MG90S por PWM. RTOS-agnostico y multi-instancia.
   *
-  *          Requisitos de CubeMX:
-  *            - TIM en PWM Generation, con el Prescaler que de 1 us/tick
-  *              (PSC = MHz del timer - 1; en este proyecto 16 MHz -> PSC=15) y
-  *              ARR=19999 (20 ms -> 50 Hz). Asi el CCR en cuentas equivale a us.
+  *          Requiere TIM en PWM Generation a 1 us/tick con ARR=19999 (50 Hz).
   ******************************************************************************
   */
 
@@ -33,24 +26,20 @@ typedef enum {
 typedef struct Servo Servo_HandleTypeDef;
 
 /**
-  * @brief  Reserva un handle de un pool estatico interno (sin malloc). Devuelve
-  *         NULL si el pool esta agotado. No hay Destroy.
+  * @brief  Reserva un handle de un pool estatico interno. Devuelve
+  *         NULL si el pool esta agotado.
   */
 Servo_HandleTypeDef *Servo_Create(void);
 
 /**
-  * @brief  Inicializa el servo y arranca la generacion PWM. Recorrido inicial:
-  *         todo 0..180 (sin guarda), y queda parado en 90 grados, que es la
-  *         posicion segura mientras la aplicacion no declare la suya.
-  * @param  pwm  timer + canal en modo PWM
+  * @brief  Inicializa el servo y arranca la generacion PWM.
+  * @param  pwm  timer y canal en modo PWM
   */
 Servo_Status Servo_Init(Servo_HandleTypeDef *s,
                         TimerChannel_t pwm);
 
 /**
-  * @brief  Declara el recorrido PERMITIDO, en grados, dentro de 0..180.
-  *         Ej. dejar 10 grados de guarda a cada punta:
-  *           Servo_SetTravel(&s, 10.0f, 170.0f);
+  * @brief  Declara el recorrido PERMITIDO, en grados, dentro del rango permitido.
   * @retval SERVO_ERROR si max_deg <= min_deg o si alguno cae fuera de 0..180;
   *         en ese caso queda el recorrido anterior.
   */
@@ -58,8 +47,7 @@ Servo_Status Servo_SetTravel(Servo_HandleTypeDef *s,
                              float min_deg, float max_deg);
 
 /**
-  * @brief  Fija el angulo en grados. Unico comando del driver: el pulso sale de
-  *         la recta del componente y el angulo se satura al recorrido permitido.
+  * @brief  Fija el angulo del servo en grados.
   */
 Servo_Status Servo_SetAngle(Servo_HandleTypeDef *s, float deg);
 
@@ -67,4 +55,4 @@ Servo_Status Servo_SetAngle(Servo_HandleTypeDef *s, float deg);
 }
 #endif
 
-#endif /* SERVO_MG90S_H */
+#endif // SERVO_MG90S_H

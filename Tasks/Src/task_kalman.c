@@ -1,25 +1,14 @@
 /**
   ******************************************************************************
   * @file    task_kalman.c
-  * @brief   Task del filtro de Kalman (prio 4). Recibe la distancia cruda de
-  *          queue_pos, la filtra (2 estados: posicion y velocidad) y publica
-  *          AMBOS estados en queue_pos_fil.
-  *
-  *          La velocidad no es un extra: es la entrada del termino derivativo
-  *          del PID. Estimarla en el filtro, y no restando dos posiciones en el
-  *          PID, es lo que permite usar un KD util: la cuantizacion del HC-SR04
-  *          (escalones de ~0.35 cm) convertida en velocidad por diferencia
-  *          finita da varios cm/s de ruido, suficiente para hacer temblar al
-  *          servo.
-  *
-  *          El filtro ya viene creado e inicializado desde App_Init; lo unico
-  *          que depende de runtime, y por eso queda aca, es el Kalman_Reset con
-  *          la primera muestra real.
+  * @brief   Task del filtro de Kalman: recibe la distancia cruda, la filtra
+  *          (posicion + velocidad) y publica ambos estados. Se resetea si el
+  *          sensor deja de publicar.
   ******************************************************************************
   */
 
 #include "task_kalman.h"
-#include "app.h"          /* PosFil_t */
+#include "app.h"          // PosFil_t
 #include "app_config.h"
 
 #include "FreeRTOS.h"
@@ -37,22 +26,15 @@ void KalmanTask(void *argument)
     float z = 0.0f;
     if (xQueueReceive(context->queue_pos, &z, pdMS_TO_TICKS(KALMAN_TASK_TIMEOUT_MS)) == pdTRUE)
     {
-      /* Arrancar (o re-arrancar tras un corte largo) el filtro con la muestra
-       * real, no seguir de donde quedo: Kalman_Update asume que paso un
-       * KALMAN_DT desde la muestra anterior, y tras un timeout eso es falso,
-       * asi que seguir sin resetear meteria una velocidad espuria. */
       if (!inicializado) { Kalman_Reset(context->kalman, z); inicializado = 1; }
 
       PosFil_t est;
-      est.pos = Kalman_Update(context->kalman, z);        /* posicion estimada */
-      est.vel = Kalman_GetVelocity(context->kalman);      /* vel del MISMO update */
+      est.pos = Kalman_Update(context->kalman, z);        // posicion estimada
+      est.vel = Kalman_GetVelocity(context->kalman);      // vel del update
       xQueueOverwrite(context->queue_pos_fil, &est);
     }
     else
     {
-      /* Sin dato nuevo por KALMAN_TASK_TIMEOUT_MS: el sensor esta caido. Se pide
-       * un reset para la proxima muestra real en vez de filtrarla como si
-       * hubiera llegado a los 100 ms de la anterior. */
       inicializado = 0;
     }
   }

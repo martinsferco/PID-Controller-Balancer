@@ -3,15 +3,10 @@
   * @file    hc_sr04.h
   * @brief   Driver HAL para el sensor ultrasonico HC-SR04: mide distancia.
   *          No bloqueante, RTOS-agnostico y multi-instancia. Al completar una
-  *          medicion invoca un hook opcional (ver HC_SR04_SetCompleteCallback).
+  *          medicion invoca un hook opcional.
   *
-  *          Requisitos de CubeMX:
-  *            - TIM en Input Capture direct mode, con el Prescaler que de 1 us/tick
-  *              (PSC = MHz del timer - 1; en este proyecto 16 MHz -> PSC=15).
-  *            - Preferentemente un timer de 32 bits (TIM2/TIM5): la medicion y el
-  *              delay del TRIG usan resta unsigned del contador, que maneja el
-  *              wrap-around solo en 32 bits (o en 16 bits con ARR=0xFFFF).
-  *            - Pin TRIG como GPIO_Output push-pull.
+  *          Requiere TIM en Input Capture a 1 us/tick (preferentemente 32
+  *          bits) y pin TRIG como GPIO_Output push-pull.
   ******************************************************************************
   */
 
@@ -22,38 +17,31 @@
 extern "C" {
 #endif
 
-#include "main.h"   /* trae stm32f4xx_hal.h y los tipos HAL */
+#include "main.h"
 #include "bsp_types.h"
 #include <stdint.h>
 
-/* Estados de retorno de la API */
+// Estados de retorno de la interfaz de la libreria
 typedef enum {
-    HC_SR04_OK = 0,     /* hay una medicion valida disponible            */
-    HC_SR04_BUSY,       /* medicion en curso, todavia no hay dato         */
-    HC_SR04_TIMEOUT,    /* no llego el echo dentro del tiempo esperado    */
-    HC_SR04_INVALID,    /* medicion fuera de rango (descartada)           */
-    HC_SR04_ERROR       /* parametros invalidos / fallo de HAL            */
+    HC_SR04_OK = 0,     // hay una medicion valida disponible
+    HC_SR04_BUSY,       // medicion en curso, todavia no hay dato
+    HC_SR04_TIMEOUT,    // no llego el echo dentro del tiempo esperado
+    HC_SR04_INVALID,    // medicion fuera de rango (descartada)
+    HC_SR04_ERROR       // parametros invalidos / fallo de HAL
 } HC_SR04_Status;
 
 typedef struct HC_SR04_Handle HC_SR04_HandleTypeDef;
 
-/* Limites fisicos del HC-SR04 (datasheet): NO son configurables. El driver ES
- * el HC-SR04, asi que estos limites son un hecho del componente, no de la
- * aplicacion que lo usa. Publicos porque la app los necesita para derivar sus
- * propios rangos (ver SENSOR_MIN_CM en app_config.h) sin duplicarlos.
- * Por debajo de HC_SR04_HW_MIN_CM el eco deja de ser fisicamente posible
- * (zona ciega real); eso es distinto de "confiable", que es politica de la
- * app via SENSOR_SAFETY_MARGIN_CM en app_config.h. */
+// Limites fisicos del HC-SR04, no configurables
 #define HC_SR04_HW_MIN_CM      2.0f
 #define HC_SR04_HW_MAX_CM      400.0f
 
-/* Hook opcional invocado (en contexto de ISR) al completar una medicion.
- * Usalo para dar un semaforo a tu TaskSensor: ...GiveFromISR(). */
+// Hook opcional invocado (en contexto de ISR) al completar una medicion.
 typedef void (*HC_SR04_CompleteCallback)(HC_SR04_HandleTypeDef *h);
 
 /**
-  * @brief  Reserva un handle de un pool estatico interno (sin malloc). Devuelve
-  *         NULL si el pool esta agotado. No hay Destroy.
+  * @brief  Reserva un handle de un pool estatico interno. Devuelve
+  *         NULL si el pool esta agotado.
   */
 HC_SR04_HandleTypeDef *HC_SR04_Create(void);
 
@@ -64,9 +52,7 @@ HC_SR04_HandleTypeDef *HC_SR04_Create(void);
   * @param  trig  pin de salida del TRIG
   * @retval HC_SR04_OK / HC_SR04_ERROR
   */
-HC_SR04_Status HC_SR04_Init(HC_SR04_HandleTypeDef *h,
-                            TimerChannel_t echo,
-                            GpioPin_t trig);
+HC_SR04_Status HC_SR04_Init(HC_SR04_HandleTypeDef *h, TimerChannel_t echo, GpioPin_t trig);
 
 /**
   * @brief  Setea el hook que se llama al completar una medicion (contexto ISR).
@@ -75,8 +61,7 @@ HC_SR04_Status HC_SR04_Init(HC_SR04_HandleTypeDef *h,
 void HC_SR04_SetCompleteCallback(HC_SR04_HandleTypeDef *h, HC_SR04_CompleteCallback cb);
 
 /**
-  * @brief  Dispara una nueva medicion: pulso TRIG de 10 us y arma la captura
-  *         del ECHO por interrupcion. No bloquea.
+  * @brief  Dispara una nueva medicion del sensor.
   * @retval HC_SR04_OK si se disparo / HC_SR04_BUSY si ya hay una en curso
   */
 HC_SR04_Status HC_SR04_Trigger(HC_SR04_HandleTypeDef *h);
@@ -85,18 +70,17 @@ HC_SR04_Status HC_SR04_Trigger(HC_SR04_HandleTypeDef *h);
   * @brief  Obtiene la ultima distancia. No bloquea.
   * @param  out_cm  (salida) distancia en cm. Se escribe con HC_SR04_OK y
   *                 tambien con HC_SR04_INVALID (valor crudo rechazado, util
-  *                 para diagnostico); no se toca con BUSY/TIMEOUT/ERROR.
+  *                 para diagnostico).
   * @retval HC_SR04_OK     hay dato nuevo valido (queda consumido)
   *         HC_SR04_BUSY   medicion en curso, todavia sin dato
-  *         HC_SR04_TIMEOUT venció el timeout sin echo (resetea a IDLE)
+  *         HC_SR04_TIMEOUT vencio el timeout sin echo (resetea a IDLE)
   *         HC_SR04_INVALID dato fuera de rango (queda consumido)
   */
 HC_SR04_Status HC_SR04_GetDistance(HC_SR04_HandleTypeDef *h, float *out_cm);
 
 /**
   * @brief  Dispatcher global de la captura: recorre las instancias registradas y
-  *         atiende la que corresponde a (htim, canal activo). Llamalo desde
-  *         HAL_TIM_IC_CaptureCallback.
+  *         atiende la que corresponde a (htim, canal activo).
   */
 void HC_SR04_HandleInterrupt(TIM_HandleTypeDef *htim);
 
@@ -105,4 +89,4 @@ void HC_SR04_HandleInterrupt(TIM_HandleTypeDef *htim);
 }
 #endif
 
-#endif /* HC_SR04_H */
+#endif // HC_SR04_H

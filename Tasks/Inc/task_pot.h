@@ -1,7 +1,8 @@
 /**
   ******************************************************************************
   * @file    task_pot.h
-  * @brief   Task del potenciometro (setpoint): ADC -> *setpoint (sin cola).
+  * @brief   Task del potenciometro: lee el pote periodicamente y publica el
+  *          setpoint (en cm) directo en *setpoint, sin cola.
   ******************************************************************************
   */
 
@@ -15,10 +16,9 @@ extern "C" {
 #include "potentiometer.h"
 #include "FreeRTOS.h"
 
-/** @brief Todo lo que usa PotTask (handle ya configurado + IPC). */
 typedef struct {
-    Potentiometer_HandleTypeDef *pot;      /* pote ya inicializado                             */
-    volatile float              *setpoint; /* salida: setpoint vigente, lo lee PidTask directo */
+    Potentiometer_HandleTypeDef *pot;      // potenciometro ya inicializado
+    volatile float              *setpoint; // salida: setpoint vigente, lo lee PidTask directo
 } TaskPotContext;
 
 void PotTask(void *argument);
@@ -27,4 +27,4 @@ void PotTask(void *argument);
 }
 #endif
 
-#endif /* TASK_POT_H */
+#endif // TASK_POT_H

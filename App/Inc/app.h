@@ -1,8 +1,8 @@
 /**
   ******************************************************************************
   * @file    app.h
-  * @brief   Capa de wiring de la aplicacion sistema de control PID para balanceo.
-  *          Punto de entrada: App_Init() (composition root). Expone tambien los
+  * @brief   Capa de conexion de la aplicacion sistema de control PID para balanceo.
+  *          Expone el punto de entrada App_Init() y tambien los
   *          hooks de ISR y el tipo de mensaje que comparten Kalman y PID.
   ******************************************************************************
   */
@@ -14,23 +14,17 @@
 extern "C" {
 #endif
 
-#include "hc_sr04.h"   /* tipo del handle que recibe el hook del sensor */
+#include "hc_sr04.h"   // handle del sensor
 
-/* --- Estado estimado que el Kalman le pasa al PID ------------------------- *
- * Los dos estados del filtro viajan JUNTOS, en un solo item de una sola cola,
- * y eso es a proposito: el termino D del PID consume `vel`, asi que tiene que
- * ser la velocidad del MISMO update que produjo `pos`. Con dos colas separadas
- * el PID podria leer la posicion de la muestra N con la velocidad de la N-1,
- * que es exactamente una derivada desfasada. */
+// Estado estimado que Kalman le pasa al PID
 typedef struct {
-    float pos;   /* posicion filtrada [cm]                                    */
-    float vel;   /* velocidad estimada [cm/s], positiva si pos crece          */
+    float pos;   // cm
+    float vel;   // cm/s
 } PosFil_t;
 
 /**
-  * @brief  Composition root: crea drivers + IPC + contextos y las tasks, y
-  *         arranca los perifericos de tiempo real. Llamar una sola vez desde
-  *         USER CODE 2 de main.c.
+  * @brief  Crea drivers + IPC + contextos y las tasks, e inicia los perifericos
+  *         de tiempo real.
   */
 void App_Init(void);
 
@@ -44,4 +38,4 @@ void App_OnTimerTick_FromISR(void);
 }
 #endif
 
-#endif /* APP_H */
+#endif // APP_H

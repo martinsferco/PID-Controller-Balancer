@@ -1,7 +1,8 @@
 /**
   ******************************************************************************
   * @file    task_motor.h
-  * @brief   Task del actuador (servo): QueueAngulo -> PWM.
+  * @brief   Task del actuador: aplica en el servo el angulo recibido.
+  *          Failsafe: si deja de llegar angulo nuevo, nivela la barra.
   ******************************************************************************
   */
 
@@ -16,10 +17,9 @@ extern "C" {
 #include "FreeRTOS.h"
 #include "queue.h"
 
-/** @brief Todo lo que usa MotorTask (handle ya configurado + IPC). */
 typedef struct {
-    Servo_HandleTypeDef *servo;         /* servo ya inicializado              */
-    QueueHandle_t        queue_angulo;  /* entrada: angulo a aplicar          */
+    Servo_HandleTypeDef *servo;         // servo ya inicializado
+    QueueHandle_t        queue_angulo;  // entrada: angulo a aplicar
 } TaskMotorContext;
 
 void MotorTask(void *argument);
@@ -28,4 +28,4 @@ void MotorTask(void *argument);
 }
 #endif
 
-#endif /* TASK_MOTOR_H */
+#endif // TASK_MOTOR_H

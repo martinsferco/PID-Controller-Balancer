@@ -1,27 +1,9 @@
 /**
   ******************************************************************************
   * @file    app.c
-  * @brief   Composition root del sistema de control PID para balanceo: crea las
-  *          instancias de los drivers (opacos, via Create), las inicializa y
-  *          configura, arma la IPC (4 colas + queue set + 2 semaforos),
-  *          rellena un contexto por task y las crea. Aloja tambien los hooks
-  *          de ISR.
-  *
-  *          Reparto de memoria (todo persistente, nada en stack automatico):
-  *            - Lo que toca la ISR (SemSensor, SemTimer y el handle del sensor
-  *              que recibe el hook) -> file-scope en este archivo.
-  *            - Los contextos por task -> `static` locales de App_Init: duracion
-  *              estatica (sobreviven al return) pero solo App_Init los ve.
-  *          No se usan objetos locales de main(): el scheduler pisa ese stack.
-  *
-  *          Semaforos, colas y tasks se crean con las *Static de FreeRTOS (sin
-  *          heap): cada handle lleva su StaticQueue_t/StaticSemaphore_t/
-  *          StaticTask_t + storage/stack como `static` local. El setpoint
-  *          (PotTask -> PidTask) no usa cola: es un `float` compartido, escrito
-  *          por una unica task y leido por otra, sin lock (ver comentario en
-  *          PidTask). Con esto ya no queda ninguna asignacion dinamica en el
-  *          proyecto (antes la unica era el queue set del PID, que no tenia
-  *          variante *Static en esta version de FreeRTOS).
+  * @brief   Capa de conexion del sistema de control PID para balanceo: crea las
+  *          instancias de los drivers, las inicializa y configura, arma la IPC,
+  *          crea los contextos de cada task y las crea.
   ******************************************************************************
   */
 
@@ -42,17 +24,14 @@
 #include "task.h"
 #include "queue.h"
 #include "semphr.h"
-#include "tim.h"        /* htim2 (echo), htim3 (pwm), htim4 (tick) */
-#include "adc.h"        /* hadc1 */
+#include "tim.h"        
+#include "adc.h"        
 
-/* --- Lo que cruza a la ISR: file-scope para que lo vean los hooks --------- */
-static SemaphoreHandle_t      SemTimer;    /* lo da la ISR de TIM4 (100 ms)   */
-static SemaphoreHandle_t      SemSensor;   /* lo da la ISR de Input Capture   */
-static HC_SR04_HandleTypeDef *s_sensor;    /* handle del sensor (recibe hook) */
+static SemaphoreHandle_t      SemTimer;    // ISR de TIM4 (100 ms)
+static SemaphoreHandle_t      SemSensor;   // ISR de Input Capture
+static HC_SR04_HandleTypeDef *s_sensor;    // handle del sensor (recibe hook)
 
-/* ============================ Hooks de ISR ================================ */
-
-/* ISR de TIM2 (Input Capture del HC-SR04): medicion completa -> SensorTask. */
+// ISR de TIM2 (Input Capture del HC-SR04): medicion completa -> SensorTask
 void App_OnSensorComplete_FromISR(HC_SR04_HandleTypeDef *h)
 {
   (void)h;
@@ -61,7 +40,7 @@ void App_OnSensorComplete_FromISR(HC_SR04_HandleTypeDef *h)
   portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }
 
-/* ISR de TIM4 (cada 100 ms): tick hard real time del ciclo del sensor. */
+// ISR de TIM4 (cada 100 ms): tick del sensor
 void App_OnTimerTick_FromISR(void)
 {
   BaseType_t xHigherPriorityTaskWoken = pdFALSE;
@@ -69,85 +48,74 @@ void App_OnTimerTick_FromISR(void)
   portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 }
 
-/* ============================ Inicializacion ============================== */
-
 void App_Init(void)
 {
-  /* --- Semaforos binarios (file-scope: los usan los hooks) ---
-   * *Static: el control block es solo para la creacion, no hace falta que lo
-   * vea el hook, asi que puede ser static local (igual que los contextos). */
+  // Semaforos binarios (los usan los hooks)
   static StaticSemaphore_t s_sem_timer_cb;
   static StaticSemaphore_t s_sem_sensor_cb;
   SemTimer  = xSemaphoreCreateBinaryStatic(&s_sem_timer_cb);
   SemSensor = xSemaphoreCreateBinaryStatic(&s_sem_sensor_cb);
   if (SemTimer == NULL || SemSensor == NULL) { Error_Handler(); }
 
-  /* --- Colas de profundidad 1 (sus handles se guardan en los contextos) ---
-   * *Static: el storage y el control block deben durar tanto como la cola,
-   * por eso static (no automatico), aunque solo App_Init los referencia. */
+  // Colas para comunicar
   static StaticQueue_t s_queue_pos_cb;
-  static uint8_t       s_queue_pos_storage[1 * sizeof(float)];
+  static uint8_t       s_queue_pos_storage[sizeof(float)];
   static StaticQueue_t s_queue_pos_fil_cb;
-  static uint8_t       s_queue_pos_fil_storage[1 * sizeof(PosFil_t)];
+  static uint8_t       s_queue_pos_fil_storage[sizeof(PosFil_t)];
   static StaticQueue_t s_queue_angulo_cb;
-  static uint8_t       s_queue_angulo_storage[1 * sizeof(float)];
+  static uint8_t       s_queue_angulo_storage[sizeof(float)];
 
   QueueHandle_t QueuePos      = xQueueCreateStatic(1, sizeof(float), s_queue_pos_storage, &s_queue_pos_cb);
   QueueHandle_t QueuePosFil   = xQueueCreateStatic(1, sizeof(PosFil_t), s_queue_pos_fil_storage, &s_queue_pos_fil_cb);
   QueueHandle_t QueueAngulo   = xQueueCreateStatic(1, sizeof(float), s_queue_angulo_storage, &s_queue_angulo_cb);
   if (QueuePos == NULL || QueuePosFil == NULL || QueueAngulo == NULL) { Error_Handler(); }
 
-  /* --- Setpoint (PotTask -> PidTask), sin cola --------------------------
-   * PidTask solo recalcula cuando llega una posicion nueva por QueuePosFil
-   * (ver task_pid.c); un setpoint nuevo no dispara ningun computo, solo debe
-   * quedar disponible para la proxima posicion. Con un solo escritor y un
-   * solo lector, y un float alineado (atomico en una instruccion en
-   * Cortex-M), no hace falta cola ni mutex: alcanza con un `static` local
-   * (misma duracion que los contextos de abajo) pasado por puntero a ambas
-   * tasks. */
+  // Setpoint sin cola
   static float s_setpoint = SETPOINT_DEFAULT_CM;
 
-  /* --- Sensor HC-SR04: Create + Init + callback ---
-   * El rango fisico del sensor es fijo (constantes de hardware en el driver);
-   * la ventana util de la barra vive en SensorTask (SENSOR_MIN_CM/MAX_CM). */
+  // Sensor HC-SR04
   s_sensor = HC_SR04_Create();
   if (s_sensor == NULL) { Error_Handler(); }
+
   TimerChannel_t echo = { &htim2, TIM_CHANNEL_1 };
   GpioPin_t      trig = { TRIG_GPIO_Port, TRIG_Pin };
+
   if (HC_SR04_Init(s_sensor, echo, trig) != HC_SR04_OK) { Error_Handler(); }
+
   HC_SR04_SetCompleteCallback(s_sensor, App_OnSensorComplete_FromISR);
 
-  /* --- Servo MG90S: Create + Init + recorrido + nivelar al arranque --- */
+  // Servo MG90S
   Servo_HandleTypeDef *servo = Servo_Create();
   if (servo == NULL) { Error_Handler(); }
+
   TimerChannel_t pwm = { &htim3, TIM_CHANNEL_1 };
   if (Servo_Init(servo, pwm) != SERVO_OK) { Error_Handler(); }
   if (Servo_SetTravel(servo, SERVO_MIN_DEG, SERVO_MAX_DEG) != SERVO_OK) { Error_Handler(); }
-  Servo_SetAngle(servo, SERVO_LEVEL_DEG);   /* barra nivelada antes de las tasks */
 
-  /* --- Potenciometro: Create + Init (el ADC ya lo configuro CubeMX) ---
-   * El pote solo lee normalizado; el mapeo a cm del setpoint
-   * (POTENTIOMETER_MIN_CM/MAX_CM via linear_map) lo hace PotTask. */
+  Servo_SetAngle(servo, SERVO_LEVEL_DEG);   // barra nivelada antes de las tasks
+
+  // Potenciometro
   Potentiometer_HandleTypeDef *pot = Potentiometer_Create();
+
   if (pot == NULL) { Error_Handler(); }
   if (Potentiometer_Init(pot, &hadc1) != POTENTIOMETER_OK) { Error_Handler(); }
 
-  /* --- PID: Create + Init + limites + banda de integracion --- */
+  // PID
   PID_HandleTypeDef *pid = PID_Create();
   if (pid == NULL) { Error_Handler(); }
   PID_Init(pid, PID_KP, PID_KI, PID_KD, PID_DT);
   PID_SetLimits(pid, PID_OUT_MIN, PID_OUT_MAX);
   PID_SetIntegralBand(pid, PID_I_BAND);
 
-  /* --- Kalman: Create + Init (el Reset con la 1a muestra lo hace la task) --- */
+  // Kalman
   Kalman_HandleTypeDef *kalman = Kalman_Create();
   if (kalman == NULL) { Error_Handler(); }
   Kalman_Init(kalman, KALMAN_DT, KALMAN_Q, KALMAN_R, 0.0f);
 
-  /* --- Tick de 100 ms (TIM4 en modo base con interrupcion) --- */
+  // Tick de 100 ms
   if (HAL_TIM_Base_Start_IT(&htim4) != HAL_OK) { Error_Handler(); }
 
-  /* --- Contextos por task (static locales: sobreviven al return) --- */
+  // Contextos por task
   static TaskSensorContext sensor_ctx;
   sensor_ctx.sensor     = s_sensor;
   sensor_ctx.sem_timer  = SemTimer;
@@ -173,9 +141,7 @@ void App_Init(void)
   pot_ctx.pot            = pot;
   pot_ctx.setpoint       = &s_setpoint;
 
-  /* --- Tasks (una por archivo, prioridades en app_config.h) ---
-   * *Static: TCB y stack de cada task, static locales por la misma razon que
-   * las colas de arriba. */
+  // Tasks
   static StaticTask_t s_sensor_tcb;
   static StackType_t  s_sensor_stack[SENSOR_TASK_STACK];
   static StaticTask_t s_kalman_tcb;

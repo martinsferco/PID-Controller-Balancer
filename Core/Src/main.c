@@ -97,7 +97,7 @@ int main(void)
   MX_ADC1_Init();
   MX_TIM4_Init();
   /* USER CODE BEGIN 2 */
-  App_Init();   /* crea semaforo + tasks (definido en App/Src/app.c) */
+  App_Init();   
   /* USER CODE END 2 */
 
   /* Init scheduler */
@@ -108,10 +108,6 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  /* Arranque nativo de FreeRTOS (estilo BlinkyRTOS). Las tasks ya se crearon en
-   * App_Init() (USER CODE 2). Se usa la API nativa en vez de la capa CMSIS
-   * (osKernelInitialize/MX_FREERTOS_Init/osKernelStart). vTaskStartScheduler()
-   * no retorna. */
   vTaskStartScheduler();
   while (1)
   {
@@ -165,10 +161,9 @@ void SystemClock_Config(void)
 
 /* USER CODE BEGIN 4 */
 
-/* Puente HAL -> libreria: el HAL invoca este callback en cada captura de
+/* El HAL invoca este callback en cada captura de
  * Input Capture (contexto ISR). El dispatcher la entrega a la instancia del
- * sensor que corresponde, segun (timer, canal activo). El resto de la logica
- * del sensor vive en App/ (task_sensor.c). */
+ * sensor que corresponde. */
 void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 {
   HC_SR04_HandleInterrupt(htim);

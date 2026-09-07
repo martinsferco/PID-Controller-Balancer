@@ -1,16 +1,8 @@
 /**
   ******************************************************************************
   * @file    task_pot.c
-  * @brief   Task del potenciometro (prio 1). Cada POT_PERIOD_MS lee la posicion
-  *          NORMALIZADA del pote (0.0..1.0) y la mapea al rango de setpoint en cm
-  *          con linear_map, publicando el resultado en *context->setpoint (una
-  *          variable compartida con PidTask, sin cola de por medio).
-  *
-  *          La lectura y la conversion son responsabilidades separadas: el
-  *          driver del pote solo lee (normalizado), y esta task decide a que
-  *          magnitud lo convierte. Asi el mismo pote sirve para cualquier
-  *          magnitud sin tocar el driver. El pote ya quedo creado e inicializado
-  *          en App_Init.
+  * @brief   Task del potenciometro: cada POT_PERIOD_MS lee el pote y
+  *          publica el setpoint (cm) en *context->setpoint, sin cola.
   ******************************************************************************
   */
 

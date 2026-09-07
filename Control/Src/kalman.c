@@ -7,21 +7,25 @@
 
 #include "kalman.h"
 
-/* Estado x = [pos, vel]^T. Modelo de transicion (velocidad constante):
- *   F = [[1, dt],[0, 1]]      H = [1, 0]
- * Q (ruido de proceso, aceleracion como white noise, densidad q):
- *   Q = q * [[dt^3/3, dt^2/2],[dt^2/2, dt]]
- * R = varianza de medicion (escalar). Struct opaco: se define aca. */
+// Estado del filtro: x = [posicion, velocidad]. Modelo de transicion, sin
+// aceleracion (velocidad constante):
+//   pos' = pos + vel*dt
+//   vel' = vel
+// En forma matricial x' = F x, con F = [[1, dt], [0, 1]]. Se mide solo la
+// posicion (no la velocidad): H = [1, 0].
+// El ruido de proceso Q modela la aceleracion como ruido blanco de densidad
+// q: Q = q * [[dt^3/3, dt^2/2], [dt^2/2, dt]]. R es la varianza de la
+// medicion (escalar).
 struct Kalman {
-    float dt;                 /* paso de tiempo [s]                     */
-    float q;                  /* densidad de ruido de proceso           */
-    float r;                  /* varianza de medicion                   */
-    float x0;                 /* estado: posicion estimada              */
-    float x1;                 /* estado: velocidad estimada             */
-    float P00, P01, P10, P11; /* matriz de covarianza del error         */
+    float dt;                 // paso de tiempo [s]
+    float q;                  // densidad de ruido de proceso
+    float r;                  // varianza de medicion
+    float x0;                 // estado: posicion estimada
+    float x1;                 // estado: velocidad estimada
+    float P00, P01, P10, P11; // matriz de covarianza del error
 };
 
-/* Pool estatico de handles: el modulo es dueno de la memoria (sin malloc). */
+// Pool estatico de handles
 #ifndef KALMAN_MAX_INSTANCES
 #define KALMAN_MAX_INSTANCES  1
 #endif
@@ -37,7 +41,7 @@ Kalman_HandleTypeDef *Kalman_Create(void)
 
 static void kalman_reset_cov(Kalman_HandleTypeDef *kf)
 {
-    /* Covarianza inicial: incertidumbre moderada, sin correlacion. */
+    // Covarianza inicial: incertidumbre moderada, sin correlacion
     kf->P00 = 1.0f; kf->P01 = 0.0f;
     kf->P10 = 0.0f; kf->P11 = 1.0f;
 }
@@ -67,18 +71,16 @@ float Kalman_Update(Kalman_HandleTypeDef *kf, float z)
 
     const float dt = kf->dt;
 
-    /* ---- Prediccion: x = F x ---- */
+    // Prediccion: x = F x
     kf->x0 = kf->x0 + dt * kf->x1;
-    /* kf->x1 = kf->x1;  (velocidad constante) */
+    // kf->x1 = kf->x1;  (velocidad constante)
 
-    /* ---- Prediccion de covarianza: P = F P F^T + Q ---- */
-    /* F P F^T con F = [[1,dt],[0,1]] */
+    // Prediccion de covarianza: P = F P F^T + Q
     const float p00 = kf->P00 + dt * (kf->P10 + kf->P01) + dt * dt * kf->P11;
     const float p01 = kf->P01 + dt * kf->P11;
     const float p10 = kf->P10 + dt * kf->P11;
     const float p11 = kf->P11;
 
-    /* Q = q * [[dt^3/3, dt^2/2],[dt^2/2, dt]] */
     const float dt2 = dt * dt;
     const float dt3 = dt2 * dt;
     const float q00 = kf->q * (dt3 / 3.0f);
@@ -91,18 +93,19 @@ float Kalman_Update(Kalman_HandleTypeDef *kf, float z)
     kf->P10 = p10 + q10;
     kf->P11 = p11 + q11;
 
-    /* ---- Update con H = [1, 0] ---- */
-    const float y = z - kf->x0;               /* innovacion               */
-    const float S = kf->P00 + kf->r;          /* covarianza de innovacion */
-    if (S <= 0.0f) { return kf->x0; }         /* guarda numerica          */
+    // Update con H = [1, 0]
+    const float y = z - kf->x0;               // innovacion
+    const float S = kf->P00 + kf->r;          // covarianza de innovacion
+    if (S <= 0.0f) { return kf->x0; }         // guarda numerica
 
-    const float K0 = kf->P00 / S;             /* ganancia de Kalman       */
+    const float K0 = kf->P00 / S;             // ganancia de Kalman
     const float K1 = kf->P10 / S;
 
     kf->x0 = kf->x0 + K0 * y;
     kf->x1 = kf->x1 + K1 * y;
 
-    /* P = (I - K H) P,  con K H = [[K0,0],[K1,0]] */
+    // P = (I - K H) P, con K H = [[K0,0],[K1,0]]. Forma simplificada (no
+    // Joseph): mas liviana para el MCU, valida mientras P se mantenga simetrica.
     const float n00 = (1.0f - K0) * kf->P00;
     const float n01 = (1.0f - K0) * kf->P01;
     const float n10 = kf->P10 - K1 * kf->P00;

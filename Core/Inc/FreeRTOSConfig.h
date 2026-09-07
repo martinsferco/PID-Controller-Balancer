@@ -168,11 +168,6 @@ standard names. */
 
 /* USER CODE BEGIN Defines */
 /* Section where parameter definitions can be added (for instance, to override default ones in FreeRTOS.h) */
-
-/* Queue Sets: permiten que la PID Task bloquee en varias colas/semaforos a la vez
- * (xQueueSelectFromSet). CubeMX no expone este parametro en la GUI, por eso va aca,
- * en la seccion USER CODE, para que sobreviva a futuras regeneraciones. */
-#define configUSE_QUEUE_SETS 1
 /* USER CODE END Defines */
 
 #endif /* FREERTOS_CONFIG_H */
