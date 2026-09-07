@@ -28,8 +28,7 @@ HC-SR04 (mide distancia) -> Kalman (filtra) -> PID (calcula correccion) -> Servo
 - `Tasks/` — tasks de FreeRTOS que conectan todo
 - `Core/`, `Drivers/`, `Middlewares/` — generado por CubeMX/HAL/FreeRTOS
 
-## Documentación
+## Ramas
 
-- [`DOCUMENTACION_TECNICA.md`](DOCUMENTACION_TECNICA.md) — cómo funciona cada parte, configuración de CubeMX
-- [`Notas_Diseno.md`](Notas_Diseno.md) — por qué se eligió cada constante de `app_config.h`
-- [`GUIA_CONTINUACION_HARDWARE.md`](GUIA_CONTINUACION_HARDWARE.md) — guía para retomar el trabajo en el hardware
+- `main` — código de producción
+- `debug` — igual a `main`, con traza de todo el lazo por USART2 (115200 8N1, COM del ST-Link)
