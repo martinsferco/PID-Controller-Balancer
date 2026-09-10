@@ -7,6 +7,8 @@
 
 #include "kalman.h"
 
+#include <stddef.h>
+
 // Estado del filtro: x = [posicion, velocidad]. Modelo de transicion, sin
 // aceleracion (velocidad constante):
 //   pos' = pos + vel*dt
@@ -35,7 +37,7 @@ static unsigned      s_pool_count = 0u;
 
 Kalman_HandleTypeDef *Kalman_Create(void)
 {
-    if (s_pool_count >= KALMAN_MAX_INSTANCES) { return 0; }
+    if (s_pool_count >= KALMAN_MAX_INSTANCES) { return NULL; }
     return &s_pool[s_pool_count++];
 }
 

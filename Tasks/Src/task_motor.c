@@ -27,7 +27,7 @@ void MotorTask(void *argument)
     {
       perdida = 0u;
       Servo_SetAngle(context->servo, angle);
-      HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);   // heartbeat del lazo
+      HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
 
       DebugUart_Print("[%10lu] MOTOR angle=%.2fdeg\r\n", (unsigned long)HAL_GetTick(), angle);
     }
