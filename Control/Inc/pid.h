@@ -39,20 +39,11 @@ void  PID_SetLimits(PID_HandleTypeDef *pid, float out_min, float out_max);
 void  PID_SetIntegralBand(PID_HandleTypeDef *pid, float band);
 
 /**
-  * @brief  Salida de control para el estado actual, estimando la
-  *         velocidad de la medicion por diferencia finita. 
-  */
-float PID_Compute(PID_HandleTypeDef *pid, float setpoint, float meas);
-
-/**
-  * @brief  Igual que PID_Compute(), pero con la velocidad de la medicion dada
-  *         desde afuera. 
+  * @brief  Salida de control para el estado actual, con la velocidad de la
+  *         medicion dada desde afuera.
   * @param  rate  velocidad de la MEDICION.
   */
 float PID_ComputeRate(PID_HandleTypeDef *pid, float setpoint, float meas, float rate);
-
-/** @brief Reinicia el estado interno (integral, derivada) sin tocar ganancias. */
-void  PID_Reset(PID_HandleTypeDef *pid);
 
 #ifdef __cplusplus
 }

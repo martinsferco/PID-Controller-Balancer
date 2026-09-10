@@ -73,9 +73,7 @@ static uint32_t hc_sr04_active_channel(uint32_t channel)
 static void hc_sr04_delay_us(TIM_HandleTypeDef *htim, uint32_t us)
 {
     uint32_t start = __HAL_TIM_GET_COUNTER(htim);
-    while ((__HAL_TIM_GET_COUNTER(htim) - start) < us) {
-        // espera activa
-    }
+    while ((__HAL_TIM_GET_COUNTER(htim) - start) < us) { }
 }
 
 HC_SR04_Status HC_SR04_Init(HC_SR04_HandleTypeDef *h,

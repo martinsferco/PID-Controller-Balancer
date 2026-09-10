@@ -8,6 +8,8 @@
 
 #include "pid.h"
 
+#include <stddef.h>
+
 // Definicion del struct opaco
 struct PID {
     float kp, ki, kd;     // ganancias
@@ -16,7 +18,6 @@ struct PID {
     float out_max;        // saturacion superior de la salida
     float integ;          // termino integral acumulado
     float i_band;         // solo integra con |err| <= i_band (0 = siempre)
-    float prev_meas;      // medicion anterior (derivada por diferencia)
     float prev_err;       // error anterior (deteccion de cruce por cero)
     int   first;          // 1 = primer Compute
     int   anti_windup;    // 1 = clamping condicional del integrador
@@ -32,7 +33,7 @@ static unsigned   s_pool_count = 0u;
 
 PID_HandleTypeDef *PID_Create(void)
 {
-    if (s_pool_count >= PID_MAX_INSTANCES) { return 0; }
+    if (s_pool_count >= PID_MAX_INSTANCES) { return NULL; }
     return &s_pool[s_pool_count++];
 }
 
@@ -47,7 +48,6 @@ void PID_Init(PID_HandleTypeDef *pid, float kp, float ki, float kd, float dt)
     pid->out_max =  1.0e9f;
     pid->integ = 0.0f;
     pid->i_band = 0.0f;       // 0 = sin banda: integra siempre
-    pid->prev_meas = 0.0f;
     pid->prev_err = 0.0f;
     pid->first = 1;
     pid->anti_windup = 1;
@@ -64,28 +64,6 @@ void PID_SetIntegralBand(PID_HandleTypeDef *pid, float band)
 {
     if (pid == 0) { return; }
     pid->i_band = band;
-}
-
-void PID_Reset(PID_HandleTypeDef *pid)
-{
-    if (pid == 0) { return; }
-    pid->integ = 0.0f;
-    pid->prev_meas = 0.0f;
-    pid->prev_err = 0.0f;
-    pid->first = 1;
-}
-
-float PID_Compute(PID_HandleTypeDef *pid, float setpoint, float meas)
-{
-    if (pid == 0) { return 0.0f; }
-
-    // Primera llamada: no hay muestra anterior, la derivada arranca en 0
-    float rate = 0.0f;
-    if (!pid->first) {
-        rate = (meas - pid->prev_meas) / pid->dt;
-    }
-
-    return PID_ComputeRate(pid, setpoint, meas, rate);
 }
 
 float PID_ComputeRate(PID_HandleTypeDef *pid, float setpoint, float meas, float rate)
@@ -112,9 +90,6 @@ float PID_ComputeRate(PID_HandleTypeDef *pid, float setpoint, float meas, float 
     const float integ_new = en_banda ? (pid->integ + pid->ki * err * pid->dt)
                                      : pid->integ;
 
-    // prev_meas se mantiene fresco aunque esta entrada no lo use, para que
-    // alternar entre PID_Compute() y PID_ComputeRate() no genere un salto.
-    pid->prev_meas = meas;
     pid->prev_err = err;
     pid->first = 0;
 

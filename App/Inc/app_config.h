@@ -19,7 +19,7 @@
 #define SENSOR_SAFETY_MARGIN_CM 2.0f
 #define SENSOR_MIN_CM           (HC_SR04_HW_MIN_CM + SENSOR_SAFETY_MARGIN_CM)
 #define SENSOR_MAX_CM           20.0f   // carrito contra su limite mecanico
-#define SENSOR_ECHO_TIMEOUT_MS  50u     // > timeout del sensor, < periodo (100 ms)
+#define SENSOR_ECHO_TIMEOUT_MS  50u     
 
 // Potenciometro
 #define POTENTIOMETER_MIN_CM    SENSOR_MIN_CM

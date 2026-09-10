@@ -1,7 +1,7 @@
 /**
   ******************************************************************************
   * @file    linear_map.h
-  * @brief   Mapeo afin de un valor de un rango de entrada a uno de salida.
+  * @brief   Mapeo lineal de un valor de un rango de entrada a uno de salida.
   ******************************************************************************
   */
 
